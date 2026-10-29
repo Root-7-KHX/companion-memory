@@ -1,0 +1,3 @@
+- insert:
+    - id: companion-memory
+      name: '@local/companion-memory'

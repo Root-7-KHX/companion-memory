@@ -1,0 +1,61 @@
+{
+  "name": "@local/companion-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Roleplay companion memory for DeepSeek Harness: editable persona docs, per-conversation isolated memory, favorability tracking, 48h hot context and a local date-archived knowledge base.",
+  "author": {
+    "name": "Root-7-KHX",
+    "url": "https://github.com/Root-7-KHX"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Root-7-KHX/companion-memory.git"
+  },
+  "homepage": "https://github.com/Root-7-KHX/companion-memory#readme",
+  "bugs": {
+    "url": "https://github.com/Root-7-KHX/companion-memory/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "roleplay",
+    "companion",
+    "memory",
+    "favorability",
+    "rag"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  }
+}
