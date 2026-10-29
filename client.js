@@ -91,6 +91,11 @@ window.__ModuleLoader__.load({
 .cm-history li { display: grid; grid-template-columns: auto 96px 1fr; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
 .cm-history-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .cm-memory-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.cm-evo-block { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--cm-border, rgba(15, 23, 42, 0.12)); }
+.cm-evo-block:first-of-type { border-top: none; padding-top: 0; }
+.cm-evo-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.cm-evo-add { display: flex; gap: 8px; margin-top: 8px; }
+.cm-hint-tight { margin: 2px 0 0; }
 .cm-memory { border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 8px; padding: 8px 10px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.02)); }
 .cm-memory-archived { opacity: 0.72; }
 .cm-memory-text { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; }
@@ -305,10 +310,12 @@ window.__ModuleLoader__.load({
       const snapshot = props.snapshot
       if (!snapshot) return null
       const pending = snapshot.period && snapshot.period.due
+      const currentSpeaker = (snapshot.speakers || []).find((item) => item.isCurrent) || null
       return h(
         'div',
         { className: 'cm-pills' },
-        h(Pill, { tone: favourTone(snapshot.favorability) }, `角色对你好感 ${signed(snapshot.favorability)}`),
+        h(Pill, { tone: favourTone(snapshot.favorability) }, currentSpeaker && currentSpeaker.id !== 'default' ? `${currentSpeaker.name} 好感 ${signed(snapshot.favorability)}` : `角色对你好感 ${signed(snapshot.favorability)}`),
+        (snapshot.speakers || []).length > 1 ? h(Pill, null, `在场 ${snapshot.speakers.length} 人`) : null,
         h(Pill, null, `交互日 ${snapshot.interactionDays}${snapshot.todayCounted ? '（今日已计）' : '（今日未计）'}`),
         h(Pill, null, `对话月 第${snapshot.cycle.index}周期 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length}`),
         h(Pill, null, `活跃记忆 ${snapshot.memories.activeCount}/${snapshot.memories.limit}`),
@@ -513,14 +520,18 @@ window.__ModuleLoader__.load({
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
       const schemaAll = snapshot.docSchema || {}
       const fieldsAll = snapshot.docFields || {}
+      const aiEdit = snapshot.aiEditDocs || {}
+      const editableNames = [aiEdit.personality ? '角色性格' : null, aiEdit.examples ? '预设发言例句' : null, aiEdit.rules ? '允许&禁止行为' : null].filter(Boolean)
+      const aiLine = editableDocsLine(aiEdit, editableNames)
       return h(
         'div',
         { className: 'cm-tab-body' },
         h(
           'div',
           { className: 'cm-intro' },
-          '这三份文档是角色的最高优先级配置：AI 每次对话前都会重新读取，保存后下一轮立刻生效。说明文字固定不可改，逐项填写即可。',
+          '这三份文档是角色的核心设定：AI 每次对话前都会重新读取，保存后下一轮立刻生效。说明文字固定不可改，逐项填写即可；角色在长期相处中自己长出来的细节也会记在「记忆 → AI 自我演化」里。',
         ),
+        h('div', { className: 'cm-intro' }, aiLine),
         DOC_DEFS.map((definition) =>
           h(StructuredDoc, {
             key: definition.key,
@@ -533,6 +544,15 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** One-line explanation of what the AI may edit in the configuration tab. */
+    function editableDocsLine(aiEdit, editableNames) {
+      if (!editableNames || editableNames.length === 0) {
+        return 'AI 目前不能修改这三份文档，只有你能改；想放开就在 profile 补丁里设置 companion-memory.config.aiEditDocs。'
+      }
+      const rulesText = aiEdit.rules ? '「允许&禁止行为」也只能在安全底线内小步调整。' : '「允许&禁止行为」只有你能改。'
+      return `AI 可以在剧情需要或你明确要求时小步修改：${editableNames.join('、')}（每次必须写原因，改动会自动归档到知识库，你随时可以在这里改回来；你手动的修改永远优先）。${rulesText}`
+    }
+
     // ── memory tab ─────────────────────────────────────────────────────────
 
     function FavorabilityCard(props) {
@@ -540,6 +560,9 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = useState(snapshot.favorability)
       const [reason, setReason] = useState('')
       const [busy, setBusy] = useState(false)
+      const speakers = snapshot.speakers || []
+      const currentSpeaker = speakers.find((item) => item.isCurrent) || null
+      const currentName = currentSpeaker?.name ?? '当前说话人'
 
       useEffect(() => {
         setDraft(snapshot.favorability)
@@ -552,7 +575,7 @@ window.__ModuleLoader__.load({
         }
         setBusy(true)
         try {
-          const result = await apiPost('/favorability', { value: Number(draft), reason: reason.trim() })
+          const result = await apiPost('/favorability', { value: Number(draft), reason: reason.trim(), speaker: currentSpeaker?.name })
           setReason('')
           notify(result && result.changed ? `好感度 ${result.from} → ${result.value}` : '好感度没有变化')
           await refresh()
@@ -561,16 +584,29 @@ window.__ModuleLoader__.load({
         } finally {
           setBusy(false)
         }
-      }, [draft, reason, notify, refresh])
+      }, [draft, reason, notify, refresh, currentSpeaker])
 
       const undoLast = useCallback(async () => {
         setBusy(true)
         try {
-          const result = await apiPost('/favorability/undo', {})
+          const result = await apiPost('/favorability/undo', { speaker: currentSpeaker?.name })
           notify(`已撤销，好感度回到 ${result.value}`)
           await refresh()
         } catch (error) {
           notify(`撤销失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [notify, refresh, currentSpeaker])
+
+      const switchSpeaker = useCallback(async (id) => {
+        setBusy(true)
+        try {
+          await apiPost('/speaker', { switchTo: id })
+          notify('已切换当前说话人')
+          await refresh()
+        } catch (error) {
+          notify(`切换失败：${error.message}`, true)
         } finally {
           setBusy(false)
         }
@@ -581,7 +617,26 @@ window.__ModuleLoader__.load({
       return h(
         'section',
         { className: 'cm-card' },
-        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '角色（AI）对用户 · -100 ~ 100')),
+        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, `角色（AI）对「${currentName}」 · -100 ~ 100`)),
+        speakers.length > 1
+          ? h(
+              'div',
+              { className: 'cm-actions' },
+              speakers.map((speaker) =>
+                h(
+                  'button',
+                  {
+                    key: speaker.id,
+                    type: 'button',
+                    className: `cm-btn cm-btn-small${speaker.isCurrent ? ' cm-btn-primary' : ' cm-btn-ghost'}`,
+                    disabled: busy || speaker.isCurrent,
+                    onClick: () => switchSpeaker(speaker.id),
+                  },
+                  `${speaker.name} ${signed(speaker.favorability)}`,
+                ),
+              ),
+            )
+          : null,
         h(
           'div',
           { className: 'cm-fav-row' },
@@ -603,7 +658,7 @@ window.__ModuleLoader__.load({
         ),
         h('textarea', {
           className: 'cm-textarea cm-textarea-small',
-          placeholder: '填写本次角色对用户的好感度变动理由（必填，例如：用户认真倾听了角色的烦恼并给出安慰）',
+          placeholder: '填写本次角色对当前说话人的好感度变动理由（必填，例如：用户认真倾听了角色的烦恼并给出安慰；多人对话会记到当前说话人头上）',
           value: reason,
           onChange: (event) => setReason(event.target.value),
           rows: 2,
@@ -626,7 +681,7 @@ window.__ModuleLoader__.load({
                   { key: `${change.at}-${index}` },
                   h('span', { className: 'cm-muted' }, formatStamp(change.at)),
                   h('span', { className: `cm-history-value ${favourTone(change.value)}` }, `${change.value}（${signed(change.value - change.from)}）`),
-                  h('span', null, change.reason),
+                  h('span', null, change.speakerName && change.speakerName !== '用户' ? `${change.speakerName}：${change.reason}` : change.reason),
                 ),
               ),
             )
@@ -676,6 +731,135 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function EvolutionCard(props) {
+      const { snapshot, refresh, notify } = props
+      const evolution = snapshot.evolution || { order: [], sections: {}, total: 0, limit: 12 }
+      const order = Array.isArray(evolution.order) ? evolution.order : []
+      const [drafts, setDrafts] = useState({})
+      const [busyKey, setBusyKey] = useState('')
+
+      const addEntry = useCallback(
+        async (sectionKey) => {
+          const text = String(drafts[sectionKey] || '').trim()
+          if (text === '') {
+            notify('先写一句要补充的内容再添加', true)
+            return
+          }
+          setBusyKey(sectionKey)
+          try {
+            await apiPost('/evolve', { section: sectionKey, add: [{ text, reason: '用户手动添加' }], reason: '用户手动添加' })
+            setDrafts((prev) => ({ ...prev, [sectionKey]: '' }))
+            notify('已添加一条自我演化')
+            await refresh()
+          } catch (error) {
+            notify(`添加失败：${error.message}`, true)
+          } finally {
+            setBusyKey('')
+          }
+        },
+        [drafts, notify, refresh],
+      )
+
+      const removeEntry = useCallback(
+        async (sectionKey, id) => {
+          setBusyKey(sectionKey)
+          try {
+            await apiPost('/evolve', { section: sectionKey, remove: [id] })
+            notify('已删除这条自我演化')
+            await refresh()
+          } catch (error) {
+            notify(`删除失败：${error.message}`, true)
+          } finally {
+            setBusyKey('')
+          }
+        },
+        [notify, refresh],
+      )
+
+      return h(
+        'section',
+        { className: 'cm-card' },
+        h(
+          'div',
+          { className: 'cm-card-head' },
+          h('h3', null, 'AI 自我演化'),
+          h('span', { className: 'cm-muted' }, `共 ${evolution.total} 条 · 每区上限 ${evolution.limit}`),
+        ),
+        h(
+          'p',
+          { className: 'cm-hint' },
+          '这些不是用户写下的固定设定：角色在长期对话里会慢慢长出新的性格细节、喜欢/讨厌的事物和行为习惯，由 AI 按剧情理由自行添加，也会写进系统提示。用户可以手动补一条，或删掉不合适的。',
+        ),
+        order.map((key) => {
+          const section = evolution.sections ? evolution.sections[key] : null
+          if (!section) return null
+          const entries = Array.isArray(section.entries) ? section.entries : []
+          return h(
+            'div',
+            { key, className: 'cm-evo-block' },
+            h(
+              'div',
+              { className: 'cm-evo-head' },
+              h('strong', null, section.label),
+              h('span', { className: 'cm-muted' }, `${entries.length}/${evolution.limit}`),
+            ),
+            h('p', { className: 'cm-hint cm-hint-tight' }, section.hint),
+            entries.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有条目。')
+              : h(
+                  'div',
+                  { className: 'cm-memory-list' },
+                  entries.map((entry) =>
+                    h(
+                      'div',
+                      { key: entry.id, className: 'cm-memory' },
+                      h('div', { className: 'cm-memory-text' }, entry.text),
+                      h(
+                        'div',
+                        { className: 'cm-memory-meta' },
+                        h(
+                          'span',
+                          null,
+                          `${entry.day || ''}｜${entry.by === 'ai' ? 'AI 演化' : '用户添加'}${entry.reason ? `｜${entry.reason}` : ''}`,
+                        ),
+                        h(
+                          'button',
+                          {
+                            className: 'cm-btn cm-btn-small cm-btn-ghost',
+                            type: 'button',
+                            disabled: busyKey === key,
+                            onClick: () => removeEntry(key, entry.id),
+                          },
+                          '删除',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            h(
+              'div',
+              { className: 'cm-evo-add' },
+              h('input', {
+                className: 'cm-input',
+                type: 'text',
+                placeholder: `补充一条${section.label}，例如……`,
+                value: drafts[key] || '',
+                onChange: (event) => {
+                  const value = event.target.value
+                  setDrafts((prev) => ({ ...prev, [key]: value }))
+                },
+              }),
+              h(
+                'button',
+                { className: 'cm-btn cm-btn-small cm-btn-primary', type: 'button', disabled: busyKey === key, onClick: () => addEntry(key) },
+                '添加',
+              ),
+            ),
+          )
+        }),
+      )
+    }
+
     function MemoryTab(props) {
       const { snapshot, refresh, notify } = props
       const [draft, setDraft] = useState('')
@@ -715,6 +899,7 @@ window.__ModuleLoader__.load({
         'div',
         { className: 'cm-tab-body' },
         h(FavorabilityCard, { snapshot, refresh, notify }),
+        h(EvolutionCard, { snapshot, refresh, notify }),
         h(
           'section',
           { className: 'cm-card' },
@@ -1160,15 +1345,29 @@ window.__ModuleLoader__.load({
         ['当前时间', formatStamp(snapshot.updatedAt)],
         ['聊天交互日', `累计第 ${snapshot.interactionDays} 个${snapshot.todayCounted ? '（今天已计入）' : '（今天尚未计入）'}`],
         ['首次对话日', snapshot.firstInteractionDay || '—'],
-        ['好感度（角色对用户）', `${signed(snapshot.favorability)}（-100 ~ 100）`],
+        ['好感度（角色对当前说话人）', (() => {
+          const current = (snapshot.speakers || []).find((item) => item.isCurrent) || null
+          return `${signed(snapshot.favorability)}（-100 ~ 100）${current && current.id !== 'default' ? `｜当前：${current.name}` : ''}`
+        })()],
+        ['在场人物', (snapshot.speakers || []).length > 1
+          ? snapshot.speakers.map((speaker) => `${speaker.name}(${signed(speaker.favorability)})${speaker.isCurrent ? '·当前' : ''}`).join(' / ')
+          : '仅当前用户（单人对话；多人时 AI 会自动区分说话人）'],
+        ['说话方式', (() => {
+          const style = snapshot.replyStyle || { mode: 'brief', maxSentences: 3 }
+          if (style.mode === 'off') return '未限制（按角色设定自由发挥）'
+          if (style.mode === 'brief') return `简短像真人（默认 ${style.maxSentences} 句内，不用文档格式）`
+          if (style.mode === 'normal') return `自然长度（一般 ${style.maxSentences} 句内）`
+          return '需要时可详细（仍保持口语化）'
+        })()],
         ['48 小时(聊天时间)归纳', period.due ? '已到期，等待本轮对话完成' : period.nextDueAt ? `未到期，预计 ${formatStamp(period.nextDueAt)}` : '尚未开始计时'],
         ['上次归纳时间', period.lastSummaryAt ? formatStamp(period.lastSummaryAt) : '—'],
         ['对话月周期', `第 ${snapshot.cycle.index} 周期，已进行 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length} 个交互日`],
         ['周期起始日', snapshot.cycle.startDate || '—'],
         ['活跃记忆', `${snapshot.memories.activeCount} 条（上限 ${snapshot.memories.limit} 个交互日自动归档）`],
         ['已归档记忆', `${snapshot.memories.archivedCount} 条`],
-        ['知识库归档', `${snapshot.knowledge.archive.length} 天记录 · ${snapshot.knowledge.monthly.length} 份月度包 · ${(snapshot.knowledge.packs || []).length} 份自动打包`],
+        ['知识库归档', `${snapshot.knowledge.archive.length} 天记录 · ${snapshot.knowledge.monthly.length} 份月度包 · ${(snapshot.knowledge.packs || []).length} 份打包/压缩文档`],
         ['自动打包', snapshot.autoPack && snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮一次（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince}/${snapshot.autoPack.every} 轮，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在知识库页设置）'],
+        ['上下文压缩', snapshot.contextCompression && snapshot.contextCompression.count > 0 ? `已压缩 ${snapshot.contextCompression.count} 次（累计节省约 ${snapshot.contextCompression.shadowedTokens} tokens）${snapshot.contextCompression.lastAt ? `｜最近 ${formatStamp(snapshot.contextCompression.lastAt)}` : ''}` : '尚未触发（上下文接近模型窗口上限时，较早的对话会自动压缩成记忆块）'],
         ['最近两个聊天日上下文', snapshot.recent ? `${snapshot.recent.count} 条（用户 ${snapshot.recent.userCount} / 角色 ${snapshot.recent.assistantCount}）${snapshot.recent.newestAt ? `｜最新 ${formatStamp(snapshot.recent.newestAt)}` : ''}` : '—'],
         ['记录统计', `记录轮次 ${snapshot.stats.turnsRecorded} · 48h(聊天时间)归纳 ${snapshot.stats.summaries} · 月度打包 ${snapshot.stats.monthlyPackages}`],
       ]
@@ -1201,6 +1400,7 @@ window.__ModuleLoader__.load({
             h('li', null, '可在知识库页设置「每 N 轮对话自动打包一次」：满 N 轮时系统自动把区间内的重点原文、次要摘要、归纳与好感度变更整理成知识库文档。'),
             h('li', null, '知识库归档格式：归档日期：YYYY-MM-DD HH:MM，按日期分组存放。'),
             h('li', null, '最近两个聊天日的原始对话会被缓存，AI 可直接检索原话（聊天时间口径：没聊天的日子不占额度）；超出后自动清理，只保留知识库归档。'),
+            h('li', null, '当上下文接近模型窗口上限时，较早的对话会自动压缩成伴侣记忆式的记忆块（重要原文 + 次要摘要 + 好感度变化 + 未完成事项），存进知识库 packs/ 并替换旧对话，长对话可以一直继续下去。'),
             h('li', null, '归档旧内容默认不加载，只有用户主动询问旧事时才会检索知识库。'),
           ),
         ),
