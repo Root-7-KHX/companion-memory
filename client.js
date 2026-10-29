@@ -84,6 +84,17 @@ window.__ModuleLoader__.load({
 .cm-check { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--cm-text); cursor: pointer; }
 .cm-check input { accent-color: var(--cm-brand, #2f6bff); }
 .cm-fav-row { display: flex; align-items: center; gap: 14px; margin: 10px 0 4px; }
+/* 每个说话人一条独立滑条 */
+.cm-fav-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 6px; }
+.cm-fav-row-inline { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'head head' 'slider slider' 'foot foot'; gap: 6px 10px; align-items: center; margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
+.cm-fav-row-inline.cm-fav-row-current { outline: 1px solid var(--cm-brand, #2f6bff); outline-offset: -1px; }
+.cm-fav-inline-head { grid-area: head; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cm-fav-name { font-weight: 600; font-size: 13px; }
+.cm-fav-value-sm { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.cm-fav-row-inline .cm-slider { grid-area: slider; }
+.cm-fav-inline-foot { grid-area: foot; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.cm-input-small { height: 28px; font-size: 12px; }
+/* 好感度卡片跟随页面一起滚动（不做任何固定，避免遮住下面的内容） */
 .cm-fav-value { font-size: 34px; font-weight: 700; min-width: 84px; font-variant-numeric: tabular-nums; color: var(--cm-text); }
 .cm-fav-controls { flex: 1 1 auto; }
 .cm-slider { width: 100%; accent-color: var(--cm-brand, #2f6bff); }
@@ -142,6 +153,7 @@ window.__ModuleLoader__.load({
 .cm-picker-group { display: flex; flex-direction: column; gap: 1px; }
 .cm-picker-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--cm-text-2, #475569); font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
 .cm-picker-group-head:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+  .cm-picker-new { margin-left: 6px; padding: 2px 8px; font-size: 11px; flex: 0 0 auto; }
 .cm-picker-caret { width: 12px; font-size: 11px; color: var(--cm-text-2, #64748b); }
 .cm-picker-group-name { font-weight: 600; color: var(--cm-text, #1f2328); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-picker-group-count { margin-left: auto; font-size: 11px; color: var(--cm-text-2, #64748b); }
@@ -555,6 +567,124 @@ window.__ModuleLoader__.load({
 
     // ── memory tab ─────────────────────────────────────────────────────────
 
+    /**
+     * 每个说话人一条独立的好感度滑条。
+     * 原来只有「当前说话人」一条，切人要先点按钮；现在「每个人单独拉一条」——
+     * 群里几个人各自一行，拖谁的条就是改谁的好感度。
+     */
+    function SpeakerFavorRow(props) {
+      const { speaker, snapshot, refresh, notify } = props
+      const [draft, setDraft] = useState(speaker.favorability)
+      const [busy, setBusy] = useState(false)
+      const [reason, setReason] = useState('')
+      const [open, setOpen] = useState(false)
+
+      useEffect(() => {
+        setDraft(speaker.favorability)
+      }, [speaker.favorability])
+
+      // 拖动停 500ms 自动保存（不用再点按钮），保存后刷新
+      useEffect(() => {
+        if (Number(draft) === Number(speaker.favorability)) return undefined
+        const timer = setTimeout(() => {
+          void (async () => {
+            setBusy(true)
+            try {
+              const result = await apiPost('/favorability', {
+                value: Number(draft),
+                reason: reason.trim() || '用户在面板里手动拖动调整',
+                speaker: speaker.name,
+              })
+              notify(result && result.changed
+                ? `${speaker.name} 的好感度 ${result.from} → ${result.value}`
+                : `${speaker.name} 的好感度没有变化`)
+              setOpen(false)
+              await refresh()
+            } catch (error) {
+              notify(`更新失败：${error.message}`, true)
+            } finally {
+              setBusy(false)
+            }
+          })()
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [draft, reason, notify, refresh, speaker.name, speaker.favorability])
+
+      const submit = useCallback(async () => {
+        const reasonText = reason.trim() || '用户在面板里手动调整'
+        setBusy(true)
+        try {
+          const result = await apiPost('/favorability', {
+            value: Number(draft),
+            reason: reasonText,
+            speaker: speaker.name,
+          })
+          setReason('')
+          setOpen(false)
+          notify(result && result.changed
+            ? `${speaker.name} 的好感度 ${result.from} → ${result.value}`
+            : `${speaker.name} 的好感度没有变化`)
+          await refresh()
+        } catch (error) {
+          notify(`更新失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [draft, reason, notify, refresh, speaker.name])
+
+      const dirty = Number(draft) !== Number(speaker.favorability)
+
+      return h(
+        'div',
+        { className: `cm-fav-row cm-fav-row-inline${speaker.isCurrent ? ' cm-fav-row-current' : ''}` },
+        h(
+          'div',
+          { className: 'cm-fav-inline-head' },
+          h('span', { className: 'cm-fav-name' }, speaker.name + (speaker.isCurrent ? ' ·当前' : '')),
+          h('span', { className: `cm-fav-value-sm ${favourTone(speaker.favorability)}` }, signed(speaker.favorability)),
+        ),
+        h('input', {
+          className: 'cm-slider',
+          type: 'range',
+          min: -100,
+          max: 100,
+          step: 1,
+          value: draft,
+          onChange: (event) => {
+            setDraft(Number(event.target.value))
+            setOpen(true)
+          },
+        }),
+        h(
+          'div',
+          { className: 'cm-fav-inline-foot' },
+          h('span', { className: 'cm-muted' }, `目标：${signed(draft)}`),
+          dirty
+            ? h('button', { className: 'cm-btn cm-btn-small cm-btn-primary', type: 'button', disabled: busy, onClick: submit }, busy ? '提交中…' : '保存')
+            : h('span', { className: 'cm-muted' }, speaker.isCurrent ? '当前说话人' : '点滑条可调整'),
+          dirty
+            ? h('button', {
+                className: 'cm-btn cm-btn-small cm-btn-ghost',
+                type: 'button',
+                disabled: busy,
+                onClick: () => {
+                  setDraft(speaker.favorability)
+                  setOpen(false)
+                },
+              }, '撤销')
+            : null,
+        ),
+        open && dirty
+          ? h('input', {
+              className: 'cm-input cm-input-small',
+              placeholder: '变动理由（可不填，默认：用户在面板里手动调整）',
+              value: reason,
+              onChange: (event) => setReason(event.target.value),
+            })
+          : null,
+      )
+    }
+
     function FavorabilityCard(props) {
       const { snapshot, refresh, notify } = props
       const [draft, setDraft] = useState(snapshot.favorability)
@@ -567,6 +697,33 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         setDraft(snapshot.favorability)
       }, [snapshot.favorability])
+
+      // 单人会话的主滑条：停下 500ms 自动保存
+      useEffect(() => {
+        if (Number(draft) === Number(snapshot.favorability)) return undefined
+        if ((snapshot.speakers || []).length > 1) return undefined
+        const timer = setTimeout(() => {
+          void (async () => {
+            setBusy(true)
+            try {
+              const result = await apiPost('/favorability', {
+                value: Number(draft),
+                reason: reason.trim() || '用户在面板里手动拖动调整',
+                speaker: currentSpeaker?.name,
+              })
+              notify(result && result.changed
+                ? `好感度 ${result.from} → ${result.value}`
+                : '好感度没有变化')
+              await refresh()
+            } catch (error) {
+              notify(`更新失败：${error.message}`, true)
+            } finally {
+              setBusy(false)
+            }
+          })()
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [draft, reason, notify, refresh, snapshot.favorability, currentSpeaker])
 
       const submit = useCallback(async () => {
         if (reason.trim() === '') {
@@ -617,48 +774,57 @@ window.__ModuleLoader__.load({
       return h(
         'section',
         { className: 'cm-card' },
-        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, `角色（AI）对「${currentName}」 · -100 ~ 100`)),
+        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '角色（AI）对每个人 · -100 ~ 100')),
+        // ── 每个说话人一条独立滑条（群里人人一条，拖谁就是改谁）──
+        speakers.length > 1
+          ? h(
+              'div',
+              { className: 'cm-fav-list' },
+              speakers.map((speaker) =>
+                h(SpeakerFavorRow, {
+                  key: speaker.id,
+                  speaker,
+                  snapshot,
+                  refresh,
+                  notify,
+                }),
+              ),
+            )
+          : h(
+              'div',
+              { className: 'cm-fav-row' },
+              h('div', { className: `cm-fav-value ${favourTone(snapshot.favorability)}` }, signed(snapshot.favorability)),
+              h(
+                'div',
+                { className: 'cm-fav-controls' },
+                h('input', {
+                  className: 'cm-slider',
+                  type: 'range',
+                  min: -100,
+                  max: 100,
+                  step: 1,
+                  value: draft,
+                  onChange: (event) => setDraft(Number(event.target.value)),
+                }),
+                h('div', { className: 'cm-muted' }, `目标值：${signed(draft)}（当前说话人：${currentName}）`),
+              ),
+            ),
         speakers.length > 1
           ? h(
               'div',
               { className: 'cm-actions' },
-              speakers.map((speaker) =>
-                h(
-                  'button',
-                  {
-                    key: speaker.id,
-                    type: 'button',
-                    className: `cm-btn cm-btn-small${speaker.isCurrent ? ' cm-btn-primary' : ' cm-btn-ghost'}`,
-                    disabled: busy || speaker.isCurrent,
-                    onClick: () => switchSpeaker(speaker.id),
-                  },
-                  `${speaker.name} ${signed(speaker.favorability)}`,
-                ),
-              ),
+              h('span', { className: 'cm-muted' }, '当前说话人：'),
+              h('button', {
+                className: 'cm-btn cm-btn-small cm-btn-ghost',
+                type: 'button',
+                disabled: busy,
+                onClick: () => switchSpeaker(currentSpeaker?.id ?? speakers[0]?.id),
+              }, currentName),
             )
           : null,
-        h(
-          'div',
-          { className: 'cm-fav-row' },
-          h('div', { className: `cm-fav-value ${favourTone(snapshot.favorability)}` }, signed(snapshot.favorability)),
-          h(
-            'div',
-            { className: 'cm-fav-controls' },
-            h('input', {
-              className: 'cm-slider',
-              type: 'range',
-              min: -100,
-              max: 100,
-              step: 1,
-              value: draft,
-              onChange: (event) => setDraft(Number(event.target.value)),
-            }),
-            h('div', { className: 'cm-muted' }, `目标值：${signed(draft)}`),
-          ),
-        ),
         h('textarea', {
           className: 'cm-textarea cm-textarea-small',
-          placeholder: '填写本次角色对当前说话人的好感度变动理由（必填，例如：用户认真倾听了角色的烦恼并给出安慰；多人对话会记到当前说话人头上）',
+          placeholder: '填写本次角色对当前说话人的好感度变动理由（必填；群聊里每个说话人有独立滑条，拖哪条就是改谁）',
           value: reason,
           onChange: (event) => setReason(event.target.value),
           rows: 2,
@@ -1178,7 +1344,6 @@ window.__ModuleLoader__.load({
       const { snapshot, notify } = props
       const [busy, setBusy] = useState('')
       const [imported, setImported] = useState(null)
-      const [merge, setMerge] = useState(false)
       const fileRef = useRef(null)
 
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
@@ -1198,7 +1363,41 @@ window.__ModuleLoader__.load({
           link.click()
           document.body.removeChild(link)
           setTimeout(() => URL.revokeObjectURL(url), 4000)
-          notify(`已导出记忆文档：${name}`)
+          const counts = bundle.conversation && bundle.conversation.counts
+          const where = bundle.conversation && bundle.conversation.source === 'session' ? '完整聊天记录' : '48 小时热缓存'
+          notify(
+            counts
+              ? `已导出：${name}（含${where} ${counts.total} 条：用户 ${counts.user} / 角色 ${counts.assistant}）`
+              : `已导出记忆文档：${name}`,
+          )
+        } catch (error) {
+          notify(`导出失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+        } finally {
+          setBusy('')
+        }
+      }
+
+      /** 只导出聊天原文（Markdown），方便直接看/存档。 */
+      const doExportChat = async () => {
+        setBusy('chat')
+        try {
+          const bundle = await apiPost('/export', { title: props.title || '' })
+          const markdown = bundle.conversation && typeof bundle.conversation.markdown === 'string'
+            ? bundle.conversation.markdown
+            : '# 聊天原文\n\n（这个对话还没有可导出的聊天原文）'
+          const base = (bundle.suggestedName || 'companion-memory.json').replace(/\.json$/i, '')
+          const name = `${base}_聊天原文.md`
+          const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = name
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          setTimeout(() => URL.revokeObjectURL(url), 4000)
+          const counts = bundle.conversation && bundle.conversation.counts
+          notify(counts ? `已导出聊天原文：${name}（${counts.total} 条）` : `已导出聊天原文：${name}`)
         } catch (error) {
           notify(`导出失败：${error instanceof Error ? error.message : String(error)}`, 'error')
         } finally {
@@ -1237,6 +1436,9 @@ window.__ModuleLoader__.load({
             activeMemories: summary.activeMemories ?? (Array.isArray(state.memories) ? state.memories.filter((item) => !item.archived).length : 0),
             files: parsed.knowledge ? Object.keys(parsed.knowledge).length : 0,
             docs: parsed.docs ? Object.keys(parsed.docs).length : 0,
+            conversationMessages: (parsed.conversation && parsed.conversation.counts && parsed.conversation.counts.total)
+              ?? summary.conversationMessages
+              ?? 0,
             bundle: parsed,
           })
           notify('已读取记忆文档，请确认下面的摘要后点击导入。')
@@ -1250,14 +1452,14 @@ window.__ModuleLoader__.load({
 
       const doImport = async (overwrite) => {
         if (!imported) return
-        if (!overwrite && !merge) {
-          notify('请先勾选「合并到当前记忆」或「覆盖当前记忆」之一。', 'error')
-          return
+        if (overwrite && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          const ok = window.confirm('覆盖会把当前对话的记忆换成本文档的内容（人格文档 / 好感度 / 记忆 / 知识库 / 聊天原文）。确定覆盖吗？')
+          if (!ok) return
         }
         setBusy('import')
         try {
           const result = await apiPost('/import', { bundle: imported.bundle, merge: overwrite ? false : true })
-          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}`)
+          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条` : ''}`)
           setImported(null)
           if (props.onReload) await props.onReload()
         } catch (error) {
@@ -1277,19 +1479,22 @@ window.__ModuleLoader__.load({
           h(
             'p',
             { className: 'cm-muted' },
-            '把当前这个对话的人格文档、好感度、活跃记忆、知识库归档、自动打包设置全部打包成一个 JSON 文档。换到别的对话框（或换设备）后导入这份文档，角色就会回到现在的状态。',
+            '把当前这个对话的人格文档、好感度、活跃记忆、知识库归档、自动打包设置，以及整个聊天记录原文（包括还没被打包进知识库的上下文）全部打包成一个 JSON 文档。换到别的对话框（或换设备）后导入这份文档，角色就会回到现在的状态。',
+          h('p', { className: 'cm-muted' }, `导出对象：面板顶部「当前对话」选中的那个 —— ${props.title || '当前对话'}`),
           ),
           h(
             'div',
             { className: 'cm-actions' },
-            h('button', { className: 'cm-btn cm-btn-primary', onClick: doExport, disabled: busy === 'export' }, busy === 'export' ? '导出中…' : '导出为 JSON 文档'),
+            h('button', { className: 'cm-btn cm-btn-primary', onClick: doExport, disabled: busy === 'export' }, busy === 'export' ? '导出中…' : '导出为 JSON 文档（含聊天原文）'),
+            h('button', { className: 'cm-btn', onClick: doExportChat, disabled: busy === 'chat' }, busy === 'chat' ? '导出中…' : '只导出聊天原文（.md）'),
           ),
         ),
         h(
           'section',
           { className: 'cm-card' },
           h('div', { className: 'cm-card-head' }, h('h3', null, '导入记忆文档'), h('span', { className: 'cm-muted' }, '读取别处的记忆')),
-          h('p', { className: 'cm-muted' }, '选择之前导出的 JSON 文档，先看摘要，再决定「合并」还是「覆盖」当前这个对话的记忆。'),
+          h('p', { className: 'cm-muted' }, '选择之前导出的 JSON 文档，先看摘要，再选「合并导入」或「覆盖导入」。'),
+          h('p', { className: 'cm-muted' }, `导入目标：面板顶部「当前对话」选中的那个 —— ${props.title || '当前对话'}（不是聊天窗口里打开的那个）`),
           h('input', {
             type: 'file',
             accept: 'application/json,.json',
@@ -1315,18 +1520,15 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '活跃记忆'), h('dd', null, `${imported.activeMemories} 条`)),
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '知识库文件'), h('dd', null, `${imported.files} 个`)),
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '人格文档'), h('dd', null, `${imported.docs} 份`)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条`)),
                 ),
-                h(
-                  'label',
-                  { className: 'cm-check' },
-                  h('input', { type: 'checkbox', checked: merge, onChange: (event) => setMerge(event.target.checked) }),
-                  '合并到当前记忆（保留当前已有条目，只补充缺的部分；不勾选则覆盖）',
-                ),
+                h('p', { className: 'cm-muted' }, '选一个导入方式：合并会保留当前已有内容，只补充缺的；覆盖会用这份文档替换当前对话的记忆。'),
                 h(
                   'div',
                   { className: 'cm-actions' },
-                  h('button', { className: 'cm-btn cm-btn-primary', onClick: () => doImport(false), disabled: busy === 'import' }, busy === 'import' ? '导入中…' : '导入这份记忆'),
-                  h('button', { className: 'cm-btn', onClick: () => { setImported(null); setMerge(false) }, disabled: busy === 'import' }, '取消'),
+                  h('button', { className: 'cm-btn cm-btn-primary', onClick: () => doImport(false), disabled: busy === 'import' }, busy === 'import' ? '导入中…' : '合并导入（保留现有）'),
+                  h('button', { className: 'cm-btn', onClick: () => doImport(true), disabled: busy === 'import' }, busy === 'import' ? '导入中…' : '覆盖导入'),
+                  h('button', { className: 'cm-btn', onClick: () => { setImported(null) }, disabled: busy === 'import' }, '取消'),
                 ),
               )
             : null,
@@ -1519,6 +1721,9 @@ window.__ModuleLoader__.load({
       { id: 'overview', label: '总览' },
     ]
 
+    /** 保存 client 侧 ctx，用来调用宿主的 uiWorkspace.openSession 把新对话直接打开。 */
+    let hostCtx = null
+
     function CompanionPanel() {
       const [snapshot, setSnapshot] = useState(null)
       const [sessions, setSessions] = useState(null)
@@ -1529,6 +1734,7 @@ window.__ModuleLoader__.load({
       const [tab, setTab] = useState('config')
       const [pickerOpen, setPickerOpen] = useState(false)
       const [collapsedGroups, setCollapsedGroups] = useState({})
+      const [creating, setCreating] = useState('')
       const aliveRef = useRef(true)
       const sessionRef = useRef('')
 
@@ -1597,6 +1803,73 @@ window.__ModuleLoader__.load({
           setError(caught.message)
         }
       }, [loadState])
+
+      /**
+       * 在某个工作区里新建对话并直接切过去。
+       *
+       * 优先走宿主自己的链路（client 服务 uiWorkspace.connectWorkspace + openSession）：
+       * 宿主会把新对话挂进工作区、并把它设为「当前空白对话」，侧边栏才会显示并打开它。
+       * 直接调后台接口建出来的空会话，宿主界面不会认（空白会话只有在「当前」时才显示）。
+       */
+      const createSessionInGroup = useCallback(async (group) => {
+        const key = String((group && group.key) || '__default__')
+        setCreating(key)
+        try {
+          setActiveSession('')
+          const uiWorkspace = hostCtx && typeof hostCtx.get === 'function' ? hostCtx.get('uiWorkspace') : null
+          const workspaceId = group && group.workspaceId ? String(group.workspaceId) : ''
+          let newId = ''
+          if (uiWorkspace && workspaceId && typeof uiWorkspace.connectWorkspace === 'function') {
+            newId = String((await uiWorkspace.connectWorkspace(workspaceId)) || '')
+            if (newId && typeof uiWorkspace.openSession === 'function') {
+              try {
+                uiWorkspace.openSession(newId)
+              } catch (openError) {
+                // 打不开也不影响创建本身
+              }
+            }
+            if (newId) {
+              try {
+                await apiPost('/enable', { session: newId, enabled: true })
+              } catch (enableError) {
+                // 开启失败不影响会话本身，用户可手动开启
+              }
+              // 自动发一句「你好」：空白会话有消息后才会真正留在工作区列表里
+              try {
+                await apiPost('/session/say', { session: newId, text: '你好' })
+              } catch (sayError) {
+                // 发送失败不影响创建
+              }
+            }
+          } else {
+            const result = await apiPost('/session/new', { cwd: (group && group.cwd) || '' })
+            newId = result && result.sessionId ? String(result.sessionId) : ''
+            if (newId && uiWorkspace && typeof uiWorkspace.openSession === 'function') {
+              try {
+                uiWorkspace.openSession(newId)
+              } catch (openError) {
+                // ignore
+              }
+            }
+            if (newId) {
+              try {
+                await apiPost('/session/say', { session: newId, text: '你好' })
+              } catch (sayError) {
+                // ignore
+              }
+            }
+          }
+          notify(newId ? `已新建对话（${(group && group.label) || '当前工作区'}），已开启伴侣记忆并发送「你好」，可以直接导入` : '已新建对话')
+          setPickerOpen(false)
+          const list = await apiGet('/sessions')
+          if (aliveRef.current) setSessions(list)
+          if (newId) await switchSession(newId)
+        } catch (caught) {
+          notify(`新建对话失败：${caught.message}`, true)
+        } finally {
+          if (aliveRef.current) setCreating('')
+        }
+      }, [notify, switchSession])
 
       const toggleEnabled = useCallback(async () => {
         const target = sessionRef.current
@@ -1724,15 +1997,30 @@ window.__ModuleLoader__.load({
                         'div',
                         { className: 'cm-picker-group', key: group.key || '__default__' },
                         h(
-                          'button',
+                          'div',
                           {
-                            type: 'button',
                             className: 'cm-picker-group-head',
+                            role: 'button',
+                            tabIndex: 0,
                             onClick: () => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] })),
                           },
                           h('span', { className: 'cm-picker-caret' }, hide ? '▸' : '▾'),
                           h('span', { className: 'cm-picker-group-name', title: group.cwd || '' }, group.label),
                           h('span', { className: 'cm-picker-group-count' }, `${group.sessions.length}`),
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'cm-btn cm-btn-small cm-btn-ghost cm-picker-new',
+                              title: `在「${group.label}」里新建一个对话（会自动开启伴侣记忆，可直接导入）`,
+                              disabled: creating !== '',
+                              onClick: (event) => {
+                                event.stopPropagation()
+                                createSessionInGroup(group)
+                              },
+                            },
+                            creating === group.key ? '创建中…' : '＋ 新建对话',
+                          ),
                         ),
                         hide
                           ? null
@@ -1783,6 +2071,7 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        hostCtx = ctx
         const injectStyles = () => {
           const style = document.createElement('style')
           style.setAttribute('data-companion-memory', 'styles')

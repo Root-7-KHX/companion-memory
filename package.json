@@ -1,6 +1,6 @@
 {
   "name": "@local/companion-memory",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Roleplay companion memory for DeepSeek Harness: editable persona docs (also AI-editable by default), short human-like chat style, AI self-evolution of habits and preferences, per-conversation isolated memory, per-speaker favorability for multi-person chats, companion-style conversation context compression, 48h hot context and a local date-archived knowledge base.",
