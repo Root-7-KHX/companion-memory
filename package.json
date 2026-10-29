@@ -1,6 +1,6 @@
 {
   "name": "@local/companion-memory",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Roleplay companion memory for DeepSeek Harness: editable persona docs, per-conversation isolated memory, favorability tracking, 48h hot context and a local date-archived knowledge base.",

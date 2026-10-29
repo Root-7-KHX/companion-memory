@@ -26,7 +26,8 @@ window.__ModuleLoader__.load({
   --cm-border: var(--dsw-alias-border-l1, rgba(15, 23, 42, 0.12));
   --cm-border-strong: var(--dsw-alias-border-l2, rgba(15, 23, 42, 0.24));
   --cm-brand: var(--dsw-alias-brand-primary, #2f6bff);
-  --cm-on-brand: #14171c;
+  --cm-btn-bg: #2f5bea;
+  --cm-btn-fg: #ffffff;
   --cm-danger: var(--dsw-alias-state-error-primary, #d92d20);
   --cm-success: var(--dsw-alias-state-success-primary, #067647);
   --cm-warn: var(--dsw-alias-state-warn-primary, #b54708);
@@ -74,7 +75,7 @@ window.__ModuleLoader__.load({
 .cm-btn { appearance: none; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); background: var(--cm-bg, #ffffff); color: var(--cm-text, #1f2328); font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
 .cm-btn:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.05)); }
 .cm-btn:disabled { opacity: 0.55; cursor: default; }
-.cm-btn-primary { background: var(--cm-brand, #2f6bff); border-color: transparent; color: var(--cm-on-brand); font-weight: 600; }
+.cm-btn-primary { background: var(--cm-btn-bg, #2f5bea); border-color: transparent; color: var(--cm-btn-fg, #ffffff); font-weight: 600; }
 .cm-btn-primary:hover { filter: brightness(1.06); }
 .cm-btn-small { padding: 3px 9px; font-size: 12px; }
 .cm-btn-ghost { background: transparent; }
@@ -121,7 +122,7 @@ window.__ModuleLoader__.load({
 .cm-banner { margin: 8px 16px 0; padding: 7px 11px; border-radius: 8px; font-size: 12.5px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.14)); background: var(--cm-surface-2, rgba(15, 23, 42, 0.04)); }
 .cm-banner-error { border-color: var(--cm-danger, #d92d20); color: var(--cm-danger, #d92d20); }
 .cm-banner-ok { border-color: var(--cm-success, #067647); color: var(--cm-success, #067647); }
-.cm-session { margin: 8px 16px 0; padding: 10px 12px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.14)); border-radius: 10px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.04)); display: flex; flex-direction: column; gap: 6px; }
+.cm-session { margin: 8px 16px 0; padding: 10px 12px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.14)); border-radius: 10px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.04)); display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 20; }
 .cm-session-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cm-session-info { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; flex-wrap: wrap; }
 .cm-session-label { font-size: 12px; color: var(--cm-text-2, #64748b); }
@@ -129,6 +130,21 @@ window.__ModuleLoader__.load({
 .cm-badge { border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); border-radius: 999px; padding: 0 7px; font-size: 11px; color: var(--cm-text-2, #64748b); }
 .cm-badge-on { border-color: var(--cm-success, #067647); color: var(--cm-success, #067647); }
 .cm-select { appearance: auto; background: var(--cm-surface, #ffffff); color: var(--cm-text, #1f2328); border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.18)); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12.5px; max-width: 320px; }
+.cm-session-workspace { font-size: 11.5px; color: var(--cm-text-2, #64748b); border: 1px dashed var(--cm-border, rgba(15, 23, 42, 0.18)); border-radius: 999px; padding: 0 8px; }
+.cm-picker { display: inline-flex; }
+.cm-picker-menu { position: absolute; left: 12px; right: 12px; top: calc(100% - 2px); z-index: 40; max-height: 340px; overflow: auto; padding: 6px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.18)); border-radius: 10px; background: var(--cm-bg, #ffffff); backdrop-filter: blur(18px) saturate(1.1); box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22); display: flex; flex-direction: column; gap: 2px; }
+.cm-picker-backdrop { position: fixed; inset: 0; z-index: 30; background: transparent; }
+.cm-picker-group { display: flex; flex-direction: column; gap: 1px; }
+.cm-picker-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--cm-text-2, #475569); font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.cm-picker-group-head:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+.cm-picker-caret { width: 12px; font-size: 11px; color: var(--cm-text-2, #64748b); }
+.cm-picker-group-name { font-weight: 600; color: var(--cm-text, #1f2328); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-picker-group-count { margin-left: auto; font-size: 11px; color: var(--cm-text-2, #64748b); }
+.cm-picker-session { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px 5px 24px; border: 0; border-radius: 7px; background: transparent; color: var(--cm-text, #1f2328); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.cm-picker-session:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+.cm-picker-session-active { background: var(--cm-surface-2, rgba(15, 23, 42, 0.09)); font-weight: 600; }
+.cm-picker-dot { font-size: 10px; color: var(--cm-brand, #2f5bea); }
+.cm-picker-session-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-guide { margin: 16px; padding: 18px 18px 20px; border: 1px dashed var(--cm-border-strong, rgba(15, 23, 42, 0.28)); border-radius: 12px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); display: flex; flex-direction: column; gap: 8px; }
 .cm-guide h2 { margin: 0; font-size: 16px; }
 .cm-guide p { margin: 0; font-size: 13px; color: var(--cm-text-2, #475569); line-height: 1.65; }
@@ -224,6 +240,61 @@ window.__ModuleLoader__.load({
       return value > 0 ? `+${value}` : `${value}`
     }
 
+    // ── theme-aware contrast helpers ───────────────────────────────────────
+    // The host theme can be light or dark: `--dsw-alias-brand-primary` is a pale
+    // yellow in the dark theme but a dark ink in the light theme. A fixed text
+    // color on the brand background therefore becomes unreadable after a theme
+    // switch, so we derive the readable foreground from the actual brand color.
+
+    function parseCssColor(value) {
+      if (!value) return null
+      const text = String(value).trim()
+      const rgb = text.match(/^rgba?\(\s*([^)]+)\)$/i)
+      if (rgb) {
+        const parts = rgb[1]
+          .split(/[,\s/]+/)
+          .filter((part) => part !== '')
+          .map(Number)
+        if (parts.length < 3 || Number.isNaN(parts[0]) || Number.isNaN(parts[1]) || Number.isNaN(parts[2])) return null
+        // Fully transparent fills give no information about the painted color.
+        if (parts.length >= 4 && !Number.isNaN(parts[3]) && parts[3] === 0) return null
+        return parts.slice(0, 3)
+      }
+      const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
+      if (!hex) return null
+      let digits = hex[1]
+      if (digits.length === 3) digits = digits.split('').map((char) => char + char).join('')
+      const number = parseInt(digits.slice(0, 6), 16)
+      return [(number >> 16) & 255, (number >> 8) & 255, number & 255]
+    }
+
+    function relativeLuminance(value) {
+      const channels = parseCssColor(value)
+      if (!channels) return null
+      const linear = channels.map((channel) => {
+        const scaled = channel / 255
+        return scaled <= 0.03928 ? scaled / 12.92 : Math.pow((scaled + 0.055) / 1.055, 2.4)
+      })
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    }
+
+    function readableTextColor(background) {
+      const luminance = relativeLuminance(background)
+      if (luminance === null) return null
+      // Contrast ratio against #14171c and against #ffffff; pick the bigger one.
+      const contrastDark = (luminance + 0.05) / 0.05
+      const contrastLight = 1.05 / (luminance + 0.05)
+      return contrastDark >= contrastLight ? '#14171c' : '#ffffff'
+    }
+
+    // Fallback when the button fill cannot be read: a light page background means
+    // a light theme, whose accent surface is usually dark, and vice versa.
+    function invertedTextColor(background) {
+      const luminance = relativeLuminance(background)
+      if (luminance === null) return null
+      return luminance > 0.42 ? '#ffffff' : '#14171c'
+    }
+
     // ── shared bits ────────────────────────────────────────────────────────
 
     function Pill(props) {
@@ -241,7 +312,7 @@ window.__ModuleLoader__.load({
         h(Pill, null, `交互日 ${snapshot.interactionDays}${snapshot.todayCounted ? '（今日已计）' : '（今日未计）'}`),
         h(Pill, null, `对话月 第${snapshot.cycle.index}周期 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length}`),
         h(Pill, null, `活跃记忆 ${snapshot.memories.activeCount}/${snapshot.memories.limit}`),
-        h(Pill, { warn: pending }, pending ? '48小时归纳待完成' : '48小时归纳未到期'),
+        h(Pill, { warn: pending }, pending ? '48小时(聊天)归纳待完成' : '48小时(聊天)归纳未到期'),
       )
     }
 
@@ -492,6 +563,19 @@ window.__ModuleLoader__.load({
         }
       }, [draft, reason, notify, refresh])
 
+      const undoLast = useCallback(async () => {
+        setBusy(true)
+        try {
+          const result = await apiPost('/favorability/undo', {})
+          notify(`已撤销，好感度回到 ${result.value}`)
+          await refresh()
+        } catch (error) {
+          notify(`撤销失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [notify, refresh])
+
       const history = snapshot.favorabilityHistory || []
 
       return h(
@@ -528,6 +612,9 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-actions' },
           h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: submit, disabled: busy }, busy ? '提交中…' : '更新好感度'),
+          history.length > 0
+            ? h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: undoLast, disabled: busy }, '撤销最近一次')
+            : null,
         ),
         history.length > 0
           ? h(
@@ -550,18 +637,26 @@ window.__ModuleLoader__.load({
     function MemoryCard(props) {
       const { memory } = props
       const [busy, setBusy] = useState(false)
-      const archive = useCallback(async () => {
-        setBusy(true)
-        try {
-          await apiPost('/memory/archive', { ids: [memory.id] })
-          props.notify('已归档进知识库（原文未改动）')
-          await props.refresh()
-        } catch (error) {
-          props.notify(`归档失败：${error.message}`, true)
-        } finally {
-          setBusy(false)
-        }
-      }, [memory.id, props])
+      const act = useCallback(
+        async (path, body, message) => {
+          setBusy(true)
+          try {
+            await apiPost(path, { id: memory.id, ...body })
+            props.notify(message)
+            await props.refresh()
+          } catch (error) {
+            props.notify(`操作失败：${error.message}`, true)
+          } finally {
+            setBusy(false)
+          }
+        },
+        [memory.id, props],
+      )
+      const archive = () => act('/memory/archive', { ids: [memory.id] }, '已归档进知识库（原文未改动）')
+      const pin = () => act('/memory/pin', { pinned: !memory.pinned }, memory.pinned ? '已取消置顶' : '已置顶')
+      const up = () => act('/memory/move', { direction: 'up' }, '已上移')
+      const down = () => act('/memory/move', { direction: 'down' }, '已下移')
+      const remove = () => act('/memory/delete', {}, '已删除这条活跃记忆')
       return h(
         'div',
         { className: 'cm-memory' },
@@ -572,7 +667,11 @@ window.__ModuleLoader__.load({
           h('span', null, `保存于第 ${memory.createdInteractionDay ?? '?'} 交互日（${memory.createdDay}）`),
           h('span', null, `剩余 ${memory.remainingDays} 天`),
           (memory.tags || []).map((tag) => h('span', { key: tag, className: 'cm-tag' }, tag)),
-          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: archive, disabled: busy }, busy ? '归档中…' : '归档'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: pin, disabled: busy }, memory.pinned ? '取消置顶' : '置顶'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: up, disabled: busy, title: '上移一位' }, '↑'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: down, disabled: busy, title: '下移一位' }, '↓'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: archive, disabled: busy }, busy ? '处理中…' : '归档'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: remove, disabled: busy }, '删除'),
         ),
       )
     }
@@ -774,7 +873,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'cm-card-head' },
-            h('h3', null, '最近 48 小时上下文'),
+            h('h3', null, '最近两个聊天日上下文'),
             h('span', { className: 'cm-muted' }, props.snapshot && props.snapshot.recent ? `${props.snapshot.recent.count} 条消息` : '—'),
           ),
           h(
@@ -782,9 +881,9 @@ window.__ModuleLoader__.load({
             { className: 'cm-hint' },
             props.snapshot && props.snapshot.recent && props.snapshot.recent.count > 0
               ? `用户 ${props.snapshot.recent.userCount} 条 / 角色 ${props.snapshot.recent.assistantCount} 条，覆盖 ${formatStamp(props.snapshot.recent.oldestAt)} ~ ${formatStamp(props.snapshot.recent.newestAt)}。`
-              : '最近 48 小时内还没有对话记录。',
+              : '最近两个聊天日内还没有对话记录。',
           ),
-          h('p', { className: 'cm-muted' }, 'AI 回答「刚才/最近/我们说过什么」时从这里检索原始对话原话；超过 48 小时的消息会自动清理，只保留下方知识库里的归档与归纳。'),
+          h('p', { className: 'cm-muted' }, 'AI 回答「刚才/最近/我们说过什么」时从这里检索原始对话原话。这里是「聊天时间」口径：只有真正聊过天的日子才计入 2 天额度，没聊的日子不占用；超出后自动清理，只保留下方知识库里的归档与归纳。'),
         ),
         h(
           'section',
@@ -793,7 +892,7 @@ window.__ModuleLoader__.load({
           h(
             'p',
             { className: 'cm-hint' },
-            '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮），系统自动把这段时间的重点原文、次要摘要、48 小时归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。填 0 表示关闭。',
+            '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮），系统自动把这段时间的重点原文、次要摘要、48 小时（聊天时间）归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。填 0 表示关闭。',
           ),
           h(
             'div',
@@ -1062,7 +1161,7 @@ window.__ModuleLoader__.load({
         ['聊天交互日', `累计第 ${snapshot.interactionDays} 个${snapshot.todayCounted ? '（今天已计入）' : '（今天尚未计入）'}`],
         ['首次对话日', snapshot.firstInteractionDay || '—'],
         ['好感度（角色对用户）', `${signed(snapshot.favorability)}（-100 ~ 100）`],
-        ['48 小时归纳', period.due ? '已到期，等待本轮对话完成' : period.nextDueAt ? `未到期，预计 ${formatStamp(period.nextDueAt)}` : '尚未开始计时'],
+        ['48 小时(聊天时间)归纳', period.due ? '已到期，等待本轮对话完成' : period.nextDueAt ? `未到期，预计 ${formatStamp(period.nextDueAt)}` : '尚未开始计时'],
         ['上次归纳时间', period.lastSummaryAt ? formatStamp(period.lastSummaryAt) : '—'],
         ['对话月周期', `第 ${snapshot.cycle.index} 周期，已进行 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length} 个交互日`],
         ['周期起始日', snapshot.cycle.startDate || '—'],
@@ -1070,8 +1169,8 @@ window.__ModuleLoader__.load({
         ['已归档记忆', `${snapshot.memories.archivedCount} 条`],
         ['知识库归档', `${snapshot.knowledge.archive.length} 天记录 · ${snapshot.knowledge.monthly.length} 份月度包 · ${(snapshot.knowledge.packs || []).length} 份自动打包`],
         ['自动打包', snapshot.autoPack && snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮一次（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince}/${snapshot.autoPack.every} 轮，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在知识库页设置）'],
-        ['最近 48 小时上下文', snapshot.recent ? `${snapshot.recent.count} 条（用户 ${snapshot.recent.userCount} / 角色 ${snapshot.recent.assistantCount}）${snapshot.recent.newestAt ? `｜最新 ${formatStamp(snapshot.recent.newestAt)}` : ''}` : '—'],
-        ['记录统计', `记录轮次 ${snapshot.stats.turnsRecorded} · 48h归纳 ${snapshot.stats.summaries} · 月度打包 ${snapshot.stats.monthlyPackages}`],
+        ['最近两个聊天日上下文', snapshot.recent ? `${snapshot.recent.count} 条（用户 ${snapshot.recent.userCount} / 角色 ${snapshot.recent.assistantCount}）${snapshot.recent.newestAt ? `｜最新 ${formatStamp(snapshot.recent.newestAt)}` : ''}` : '—'],
+        ['记录统计', `记录轮次 ${snapshot.stats.turnsRecorded} · 48h(聊天时间)归纳 ${snapshot.stats.summaries} · 月度打包 ${snapshot.stats.monthlyPackages}`],
       ]
       return h(
         'div',
@@ -1098,10 +1197,10 @@ window.__ModuleLoader__.load({
             h('li', null, '侧边栏三份配置文档优先级最高，每次对话前自动读取最新内容。'),
             h('li', null, '重要信息原文进入全局活跃记忆，满 30 个聊天交互日后自动归档；次要内容只写简短摘要进知识库。'),
             h('li', null, '好感度是【角色（AI）对用户】的好感度，范围 -100 ~ 100，每次对话结束由 AI 评估并记录理由，不聊天不会自动衰减。'),
-            h('li', null, '48 小时归纳到期后，AI 会在下一轮对话完成时段小结；每满 30 个交互日自动生成月度打包文档。'),
+            h('li', null, '48 小时（聊天时间）归纳到期后，AI 会在下一轮对话完成时段小结；每满 30 个交互日自动生成月度打包文档。'),
             h('li', null, '可在知识库页设置「每 N 轮对话自动打包一次」：满 N 轮时系统自动把区间内的重点原文、次要摘要、归纳与好感度变更整理成知识库文档。'),
             h('li', null, '知识库归档格式：归档日期：YYYY-MM-DD HH:MM，按日期分组存放。'),
-            h('li', null, '最近 48 小时内的原始对话会被缓存，AI 可直接检索原话；超过 48 小时自动清理，只保留知识库归档。'),
+            h('li', null, '最近两个聊天日的原始对话会被缓存，AI 可直接检索原话（聊天时间口径：没聊天的日子不占额度）；超出后自动清理，只保留知识库归档。'),
             h('li', null, '归档旧内容默认不加载，只有用户主动询问旧事时才会检索知识库。'),
           ),
         ),
@@ -1228,6 +1327,8 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState(null)
       const [busy, setBusy] = useState(false)
       const [tab, setTab] = useState('config')
+      const [pickerOpen, setPickerOpen] = useState(false)
+      const [collapsedGroups, setCollapsedGroups] = useState({})
       const aliveRef = useRef(true)
       const sessionRef = useRef('')
 
@@ -1320,6 +1421,12 @@ window.__ModuleLoader__.load({
       const items = (sessions && sessions.items) || []
       const currentItem = items.find((item) => item.id === sessionId)
       const currentTitle = currentItem && currentItem.title ? currentItem.title : sessionId ? `对话 ${sessionId.slice(0, 8)}` : '尚未识别到对话'
+      const currentWorkspace = (currentItem && currentItem.workspace) || ''
+      const groups = sessions && Array.isArray(sessions.groups) && sessions.groups.length > 0
+        ? sessions.groups
+        : items.length > 0
+          ? [{ key: '__default__', label: '对话', cwd: null, sessions: items }]
+          : []
       const enabled = Boolean(snapshot && snapshot.enabled === true)
 
       let body = h('div', { className: 'cm-empty' }, '加载中…')
@@ -1330,7 +1437,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-guide' },
           h('h2', null, '这个对话还没有开启伴侣记忆'),
-          h('p', null, '开启后，三份人格文档、好感度、全局活跃记忆、最近 48 小时上下文与知识库都只属于「' + currentTitle + '」，其他对话各自独立、互不干扰。'),
+          h('p', null, '开启后，三份人格文档、好感度、全局活跃记忆、最近两个聊天日上下文与知识库都只属于「' + currentTitle + '」，其他对话各自独立、互不干扰。'),
           h('p', null, '新对话默认是关闭的；你可以在上面的下拉框里切换到别的对话，也可以随时关闭本对话（数据会保留，不会删除）。'),
         )
       } else if (tab === 'config') {
@@ -1390,21 +1497,68 @@ window.__ModuleLoader__.load({
               { className: 'cm-session-info' },
               h('span', { className: 'cm-session-label' }, '当前对话'),
               h('span', { className: 'cm-session-name', title: sessionId || '' }, currentTitle),
+              currentWorkspace ? h('span', { className: 'cm-session-workspace', title: currentWorkspace }, `工作区：${currentWorkspace}`) : null,
               h('span', { className: `cm-badge${enabled ? ' cm-badge-on' : ''}` }, enabled ? '已开启' : '未开启'),
             ),
-            items.length > 1
-              ? h(
-                  'select',
-                  {
-                    className: 'cm-select',
-                    value: sessionId,
-                    onChange: (event) => switchSession(event.target.value),
-                  },
-                  items.map((item) =>
-                    h('option', { key: item.id, value: item.id }, `${item.enabled ? '● ' : '○ '}${item.title || `对话 ${item.id.slice(0, 8)}`}`),
-                  ),
-                )
-              : null,
+            h(
+              'div',
+              { className: 'cm-picker' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'cm-btn cm-btn-small',
+                  disabled: groups.length === 0,
+                  onClick: () => setPickerOpen((open) => !open),
+                },
+                pickerOpen ? '收起对话列表' : '切换对话',
+              ),
+              pickerOpen ? h('div', { className: 'cm-picker-backdrop', onClick: () => setPickerOpen(false) }) : null,
+              pickerOpen
+                ? h(
+                    'div',
+                    { className: 'cm-picker-menu' },
+                    ...groups.map((group) => {
+                      const hide = collapsedGroups[group.key] === true
+                      return h(
+                        'div',
+                        { className: 'cm-picker-group', key: group.key || '__default__' },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'cm-picker-group-head',
+                            onClick: () => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] })),
+                          },
+                          h('span', { className: 'cm-picker-caret' }, hide ? '▸' : '▾'),
+                          h('span', { className: 'cm-picker-group-name', title: group.cwd || '' }, group.label),
+                          h('span', { className: 'cm-picker-group-count' }, `${group.sessions.length}`),
+                        ),
+                        hide
+                          ? null
+                          : group.sessions.map((item) =>
+                              h(
+                                'button',
+                                {
+                                  key: item.id,
+                                  type: 'button',
+                                  className: `cm-picker-session${item.id === sessionId ? ' cm-picker-session-active' : ''}`,
+                                  title: item.id,
+                                  onClick: () => {
+                                    setPickerOpen(false)
+                                    if (item.id !== sessionId) switchSession(item.id)
+                                  },
+                                },
+                                h('span', { className: 'cm-picker-dot' }, item.enabled ? '●' : '○'),
+                                h('span', { className: 'cm-picker-session-name' }, item.title || `对话 ${item.id.slice(0, 8)}`),
+                                item.live ? h('span', { className: 'cm-badge' }, '进行中') : null,
+                              ),
+                            ),
+                      )
+                    }),
+                  )
+                : null,
+            ),
             h(
               'button',
               {
