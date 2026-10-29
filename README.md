@@ -47,13 +47,14 @@
 
 ## 功能
 
-### 五个页面
+### 六个页面
 
 1. **配置**：三份角色文档 —— `角色性格.md`、`允许&禁止行为.md`、`预设发言例句.md`。说明文字固定只读，按固定字段逐项填空（基础性格 / 三观 / 说话语调 / 思考方式 / 喜好 / 雷区；允许 / 禁止 / 行为边界；日常问候 / 表达关心 / 表达不满 / 口头禅），每份末尾另有「其他补充」自由填写框。保存后下一轮对话立刻生效，优先级高于一切记忆。
-2. **记忆**：全局活跃记忆（重要原文不改、上限 30 个聊天交互日）、好感度（-100 ~ 100，变更必须写理由并归档）。
+2. **记忆**：全局活跃记忆（重要原文不改、上限 30 个聊天交互日）、好感度（**角色 / AI 对用户的好感度**，-100 ~ 100，变更必须写理由并归档）。
 3. **知识库**：按日期归档的本地文档 + 每 30 个交互日自动生成的月度打包文档 + 可自定义间隔的自动打包文档，支持关键词检索与原文查看；页面顶部显示「最近 48 小时上下文」状态与「自动打包」设置（每 N 轮一次，0 = 关闭）。
 4. **状态**：交互日计数、48 小时归纳到期状态、对话月周期进度、数据目录与统计。
 5. **总览**：只读。把注入给 AI 的每一块内容分别列成独立框，末尾给出「整体」完整系统提示词，可展开 / 复制全文，方便核对 AI 到底看到了什么。
+6. **备份**：把当前对话的整套记忆（人格文档、好感度与变动历史、活跃记忆、知识库归档/月度/自动打包、交互日与设置）导出为一个可读的 JSON 文档（如 `伴侣记忆_对话_2026-10-29.json`）；换对话或重装后导入即可完整接上。导入前会显示摘要预览，可选「合并到当前记忆」或完全覆盖。
 
 ### Host 侧自动行为
 
@@ -80,13 +81,13 @@
 在 DSH 插件市场选择「从链接安装」，填入 Release 资产直链：
 
 ```text
-https://github.com/Root-7-KHX/companion-memory/releases/download/v0.1.0/companion-memory-0.1.0.tgz
+https://github.com/Root-7-KHX/companion-memory/releases/download/v0.2.0/companion-memory-0.2.0.tgz
 ```
 
 或命令行：
 
 ```bash
-dsh plugin add https://github.com/Root-7-KHX/companion-memory/releases/download/v0.1.0/companion-memory-0.1.0.tgz
+dsh plugin add https://github.com/Root-7-KHX/companion-memory/releases/download/v0.2.0/companion-memory-0.2.0.tgz
 ```
 
 ### 方式二：本地目录安装
@@ -97,7 +98,7 @@ dsh plugin add https://github.com/Root-7-KHX/companion-memory/releases/download/
 
 ### 方式三：解压即用
 
-把 `companion-memory-0.1.0.zip` 解压到固定目录，指向该目录安装即可（无需构建、无第三方依赖、纯 ESM）。
+把 `companion-memory-0.2.0.zip` 解压到固定目录，指向该目录安装即可（无需构建、无第三方依赖、纯 ESM）。
 
 ## 使用
 
@@ -135,7 +136,7 @@ companion-memory/
 ```text
 companion-memory/
 ├── index.js              # Host 入口：注册提示词段、工具、事件追踪、HTTP API
-├── client.js             # Client 半：侧边栏图标 + 主面板（五个页面，轮询状态）
+├── client.js             # Client 半：侧边栏图标 + 主面板（六个页面，轮询状态）
 ├── lib/
 │   ├── manager.js        # 按会话管理数据目录、开启注册表、会话列表、旧数据迁移
 │   ├── store.js          # 单会话数据层：文档、记忆、好感度、归档、周期、打包

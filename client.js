@@ -79,6 +79,9 @@ window.__ModuleLoader__.load({
 .cm-btn-small { padding: 3px 9px; font-size: 12px; }
 .cm-btn-ghost { background: transparent; }
 .cm-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.cm-import-preview { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--cm-border-strong, rgba(15, 23, 42, 0.24)); border-radius: 8px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
+.cm-check { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--cm-text); cursor: pointer; }
+.cm-check input { accent-color: var(--cm-brand, #2f6bff); }
 .cm-fav-row { display: flex; align-items: center; gap: 14px; margin: 10px 0 4px; }
 .cm-fav-value { font-size: 34px; font-weight: 700; min-width: 84px; font-variant-numeric: tabular-nums; color: var(--cm-text); }
 .cm-fav-controls { flex: 1 1 auto; }
@@ -234,7 +237,7 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'cm-pills' },
-        h(Pill, { tone: favourTone(snapshot.favorability) }, `好感度 ${signed(snapshot.favorability)}`),
+        h(Pill, { tone: favourTone(snapshot.favorability) }, `角色对你好感 ${signed(snapshot.favorability)}`),
         h(Pill, null, `交互日 ${snapshot.interactionDays}${snapshot.todayCounted ? '（今日已计）' : '（今日未计）'}`),
         h(Pill, null, `对话月 第${snapshot.cycle.index}周期 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length}`),
         h(Pill, null, `活跃记忆 ${snapshot.memories.activeCount}/${snapshot.memories.limit}`),
@@ -494,7 +497,7 @@ window.__ModuleLoader__.load({
       return h(
         'section',
         { className: 'cm-card' },
-        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '-100 ~ 100')),
+        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '角色（AI）对用户 · -100 ~ 100')),
         h(
           'div',
           { className: 'cm-fav-row' },
@@ -516,7 +519,7 @@ window.__ModuleLoader__.load({
         ),
         h('textarea', {
           className: 'cm-textarea cm-textarea-small',
-          placeholder: '填写本次好感度变动理由（必填，例如：用户认真倾听了角色的烦恼并给出安慰）',
+          placeholder: '填写本次角色对用户的好感度变动理由（必填，例如：用户认真倾听了角色的烦恼并给出安慰）',
           value: reason,
           onChange: (event) => setReason(event.target.value),
           rows: 2,
@@ -885,6 +888,168 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // ── backup tab (export / import) ───────────────────────────────────────
+
+    function BackupTab(props) {
+      const { snapshot, notify } = props
+      const [busy, setBusy] = useState('')
+      const [imported, setImported] = useState(null)
+      const [merge, setMerge] = useState(false)
+      const fileRef = useRef(null)
+
+      if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
+
+      const doExport = async () => {
+        setBusy('export')
+        try {
+          const bundle = await apiPost('/export', { title: props.title || '' })
+          const name = bundle.suggestedName || 'companion-memory.json'
+          const text = JSON.stringify(bundle, null, 2)
+          const blob = new Blob([text], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = name
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          setTimeout(() => URL.revokeObjectURL(url), 4000)
+          notify(`已导出记忆文档：${name}`)
+        } catch (error) {
+          notify(`导出失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+        } finally {
+          setBusy('')
+        }
+      }
+
+      const pickFile = () => {
+        if (fileRef.current) fileRef.current.click()
+      }
+
+      const onFile = async (event) => {
+        const file = event.target.files && event.target.files[0]
+        event.target.value = ''
+        if (!file) return
+        setBusy('read')
+        try {
+          const text = await file.text()
+          let parsed = null
+          try {
+            parsed = JSON.parse(text)
+          } catch {
+            throw new Error('文件不是合法的 JSON，无法读取。')
+          }
+          if (!parsed || parsed.$format !== 'companion-memory-bundle') {
+            throw new Error('这不是伴侣记忆导出的文档（缺少 $format 标记）。')
+          }
+          const summary = parsed.summary || {}
+          const state = parsed.state || {}
+          setImported({
+            fileName: file.name,
+            exportedAt: parsed.exportedAtLocal || parsed.exportedAt || '未知时间',
+            sourceTitle: (parsed.source && parsed.source.title) || '（未记录标题）',
+            favorability: typeof summary.favorability === 'number' ? summary.favorability : (typeof state.favorability === 'number' ? state.favorability : 0),
+            interactionDays: summary.interactionDays ?? state.interactionDays ?? 0,
+            activeMemories: summary.activeMemories ?? (Array.isArray(state.memories) ? state.memories.filter((item) => !item.archived).length : 0),
+            files: parsed.knowledge ? Object.keys(parsed.knowledge).length : 0,
+            docs: parsed.docs ? Object.keys(parsed.docs).length : 0,
+            bundle: parsed,
+          })
+          notify('已读取记忆文档，请确认下面的摘要后点击导入。')
+        } catch (error) {
+          setImported(null)
+          notify(`读取失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+        } finally {
+          setBusy('')
+        }
+      }
+
+      const doImport = async (overwrite) => {
+        if (!imported) return
+        if (!overwrite && !merge) {
+          notify('请先勾选「合并到当前记忆」或「覆盖当前记忆」之一。', 'error')
+          return
+        }
+        setBusy('import')
+        try {
+          const result = await apiPost('/import', { bundle: imported.bundle, merge: overwrite ? false : true })
+          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}`)
+          setImported(null)
+          if (props.onReload) await props.onReload()
+        } catch (error) {
+          notify(`导入失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+        } finally {
+          setBusy('')
+        }
+      }
+
+      return h(
+        'div',
+        { className: 'cm-tab-body' },
+        h(
+          'section',
+          { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '导出记忆文档'), h('span', { className: 'cm-muted' }, '换对话后也能还原')),
+          h(
+            'p',
+            { className: 'cm-muted' },
+            '把当前这个对话的人格文档、好感度、活跃记忆、知识库归档、自动打包设置全部打包成一个 JSON 文档。换到别的对话框（或换设备）后导入这份文档，角色就会回到现在的状态。',
+          ),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('button', { className: 'cm-btn cm-btn-primary', onClick: doExport, disabled: busy === 'export' }, busy === 'export' ? '导出中…' : '导出为 JSON 文档'),
+          ),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '导入记忆文档'), h('span', { className: 'cm-muted' }, '读取别处的记忆')),
+          h('p', { className: 'cm-muted' }, '选择之前导出的 JSON 文档，先看摘要，再决定「合并」还是「覆盖」当前这个对话的记忆。'),
+          h('input', {
+            type: 'file',
+            accept: 'application/json,.json',
+            style: { display: 'none' },
+            ref: fileRef,
+            onChange: onFile,
+          }),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('button', { className: 'cm-btn', onClick: pickFile, disabled: busy === 'read' }, busy === 'read' ? '读取中…' : '选择 JSON 文档'),
+          ),
+          imported
+            ? h(
+                'div',
+                { className: 'cm-import-preview' },
+                h('div', { className: 'cm-muted' }, `文件：${imported.fileName}`),
+                h('dl', { className: 'cm-kv' },
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '导出时间'), h('dd', null, imported.exportedAt)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '来源对话'), h('dd', null, imported.sourceTitle)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '好感度（角色对用户）'), h('dd', null, signed(imported.favorability))),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天交互日'), h('dd', null, `${imported.interactionDays} 个`)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '活跃记忆'), h('dd', null, `${imported.activeMemories} 条`)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '知识库文件'), h('dd', null, `${imported.files} 个`)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '人格文档'), h('dd', null, `${imported.docs} 份`)),
+                ),
+                h(
+                  'label',
+                  { className: 'cm-check' },
+                  h('input', { type: 'checkbox', checked: merge, onChange: (event) => setMerge(event.target.checked) }),
+                  '合并到当前记忆（保留当前已有条目，只补充缺的部分；不勾选则覆盖）',
+                ),
+                h(
+                  'div',
+                  { className: 'cm-actions' },
+                  h('button', { className: 'cm-btn cm-btn-primary', onClick: () => doImport(false), disabled: busy === 'import' }, busy === 'import' ? '导入中…' : '导入这份记忆'),
+                  h('button', { className: 'cm-btn', onClick: () => { setImported(null); setMerge(false) }, disabled: busy === 'import' }, '取消'),
+                ),
+              )
+            : null,
+        ),
+      )
+    }
+
     // ── status tab ─────────────────────────────────────────────────────────
 
     function StatusTab(props) {
@@ -896,7 +1061,7 @@ window.__ModuleLoader__.load({
         ['当前时间', formatStamp(snapshot.updatedAt)],
         ['聊天交互日', `累计第 ${snapshot.interactionDays} 个${snapshot.todayCounted ? '（今天已计入）' : '（今天尚未计入）'}`],
         ['首次对话日', snapshot.firstInteractionDay || '—'],
-        ['好感度', `${signed(snapshot.favorability)}（-100 ~ 100）`],
+        ['好感度（角色对用户）', `${signed(snapshot.favorability)}（-100 ~ 100）`],
         ['48 小时归纳', period.due ? '已到期，等待本轮对话完成' : period.nextDueAt ? `未到期，预计 ${formatStamp(period.nextDueAt)}` : '尚未开始计时'],
         ['上次归纳时间', period.lastSummaryAt ? formatStamp(period.lastSummaryAt) : '—'],
         ['对话月周期', `第 ${snapshot.cycle.index} 周期，已进行 ${snapshot.cycle.daysInCycle}/${snapshot.cycle.length} 个交互日`],
@@ -932,7 +1097,7 @@ window.__ModuleLoader__.load({
             { className: 'cm-notes' },
             h('li', null, '侧边栏三份配置文档优先级最高，每次对话前自动读取最新内容。'),
             h('li', null, '重要信息原文进入全局活跃记忆，满 30 个聊天交互日后自动归档；次要内容只写简短摘要进知识库。'),
-            h('li', null, '好感度 -100 ~ 100，每次对话结束由 AI 评估并记录理由，不聊天不会自动衰减。'),
+            h('li', null, '好感度是【角色（AI）对用户】的好感度，范围 -100 ~ 100，每次对话结束由 AI 评估并记录理由，不聊天不会自动衰减。'),
             h('li', null, '48 小时归纳到期后，AI 会在下一轮对话完成时段小结；每满 30 个交互日自动生成月度打包文档。'),
             h('li', null, '可在知识库页设置「每 N 轮对话自动打包一次」：满 N 轮时系统自动把区间内的重点原文、次要摘要、归纳与好感度变更整理成知识库文档。'),
             h('li', null, '知识库归档格式：归档日期：YYYY-MM-DD HH:MM，按日期分组存放。'),
@@ -1050,6 +1215,7 @@ window.__ModuleLoader__.load({
       { id: 'config', label: '配置' },
       { id: 'memory', label: '记忆' },
       { id: 'knowledge', label: '知识库' },
+      { id: 'backup', label: '备份' },
       { id: 'status', label: '状态' },
       { id: 'overview', label: '总览' },
     ]
@@ -1173,6 +1339,8 @@ window.__ModuleLoader__.load({
         body = h(MemoryTab, { snapshot, refresh, notify })
       } else if (tab === 'knowledge') {
         body = h(KnowledgeTab, { snapshot, notify })
+      } else if (tab === 'backup') {
+        body = h(BackupTab, { snapshot, notify })
       } else if (tab === 'overview') {
         body = h(OverviewTab, { notify })
       } else {
