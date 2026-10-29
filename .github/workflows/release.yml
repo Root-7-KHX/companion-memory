@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -28,7 +28,10 @@ jobs:
           for f in lib/*.js; do node --check "$f"; done
 
       - name: Pack
-        run: npm pack --pack-destination dist
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+          ls -l dist
 
       - name: Publish GitHub Release with tarball
         uses: softprops/action-gh-release@v2
