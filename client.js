@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
   --cm-danger: var(--dsw-alias-state-error-primary, #d92d20);
   --cm-success: var(--dsw-alias-state-success-primary, #067647);
   --cm-warn: var(--dsw-alias-state-warn-primary, #b54708);
-  display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--cm-bg); color: var(--cm-text); font: 13px/1.55 system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; z-index: 1; background: var(--cm-bg); color: var(--cm-text); font: 13px/1.55 system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
 .cm-header { position: sticky; top: 0; z-index: 2; flex: 0 0 auto; padding: 14px 16px 0; border-bottom: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); background: var(--cm-bg, #ffffff); }
 .cm-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
