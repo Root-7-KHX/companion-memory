@@ -19,7 +19,10 @@ import { registerTool } from './lib/tool.js'
 import { registerTracking } from './lib/tracking.js'
 import { registerWebApi } from './lib/api.js'
 
-export const inject = ['systemPrompt', 'tools']
+// `webServer` must be a hard dependency: the panel's `/companion/api/*` routes
+// are registered exactly once in `apply`, so a plugin instance that starts
+// before the web server is provided would silently lose its HTTP surface.
+export const inject = ['systemPrompt', 'tools', 'webServer']
 
 export function apply(ctx, config) {
   const manager = createManager(ctx, config ?? {})
