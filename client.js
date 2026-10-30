@@ -15,6 +15,8 @@ window.__ModuleLoader__.load({
     const PLUGIN_ID = 'companion-memory'
     const API_BASE = '/companion/api'
     const POLL_MS = 5000
+    /** 项目主页：面板底部的 Star 入口用，用户自己决定点不点。 */
+    const REPO_URL = 'https://github.com/Root-7-KHX/companion-memory'
 
     const STYLES = `
 .cm-root {
@@ -61,6 +63,12 @@ window.__ModuleLoader__.load({
 .cm-field .cm-textarea { min-height: 56px; }
 .cm-extra { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--cm-border, rgba(15, 23, 42, 0.14)); display: flex; flex-direction: column; gap: 4px; }
 .cm-hint { margin: 6px 0 8px; font-size: 12px; color: var(--cm-text-2, #64748b); }
+.cm-weight { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--cm-text-2, #64748b); }
+.cm-weight-input { width: 58px; box-sizing: border-box; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); border-radius: 6px; background: var(--cm-surface-2, #f8fafc); color: var(--cm-text, #1f2328); font: inherit; font-size: 11.5px; padding: 1px 4px; text-align: center; }
+.cm-weight-input:focus { outline: 2px solid var(--cm-brand, #2f6bff); outline-offset: -1px; }
+.cm-footer { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 14px 12px; border-top: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); }
+.cm-footer-link { color: var(--cm-brand, #2f6bff); font-size: 12px; text-decoration: none; }
+.cm-footer-link:hover { text-decoration: underline; }
 .cm-muted { color: var(--cm-text-2, #64748b); font-size: 12px; }
 .cm-badge { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.12)); color: var(--cm-text-2, #64748b); }
 .cm-badge-good { color: var(--cm-success, #067647); border-color: currentColor; }
@@ -108,6 +116,10 @@ window.__ModuleLoader__.load({
 .cm-history li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
 .cm-history-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .cm-memory-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.cm-clean-option { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0 2px; font-size: 12px; color: var(--cm-text-2, #475569); cursor: pointer; }
+.cm-clean-option input { margin-top: 2px; accent-color: var(--cm-brand, #2f6bff); }
+.cm-health { margin: 4px 0 2px; }
+.cm-health-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--cm-text-2, #475569); display: flex; flex-direction: column; gap: 3px; }
 .cm-evo-block { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--cm-border, rgba(15, 23, 42, 0.12)); }
 .cm-evo-block:first-of-type { border-top: none; padding-top: 0; }
 .cm-evo-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
@@ -533,6 +545,121 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 角色（AI）自己的名字：配置页最顶上单独一块，不属于任何一份可编辑文档，
+     * 因此 AI 的 edit_doc 改不到它（后端也只有 /character-name* 这两条写入路径）。
+     *
+     * 两层取值：本对话覆盖（空 = 不覆盖）优先，否则用「所有对话通用」的默认值。
+     */
+    function CharacterNameCard(props) {
+      const globalServer = typeof props.globalValue === 'string' ? props.globalValue : ''
+      const overrideServer = typeof props.overrideValue === 'string' ? props.overrideValue : ''
+      const effective = typeof props.effective === 'string' ? props.effective : ''
+      const [globalDraft, setGlobalDraft] = useState(globalServer)
+      const [overrideDraft, setOverrideDraft] = useState(overrideServer)
+      const [status, setStatus] = useState('已保存')
+      const savedRef = useRef({ global: globalServer, override: overrideServer })
+      const editedRef = useRef(false)
+
+      useEffect(() => {
+        if (editedRef.current) return
+        const incoming = { global: globalServer, override: overrideServer }
+        if (JSON.stringify(incoming) !== JSON.stringify(savedRef.current)) {
+          savedRef.current = incoming
+          setGlobalDraft(globalServer)
+          setOverrideDraft(overrideServer)
+          setStatus('已同步磁盘内容')
+        }
+      }, [globalServer, overrideServer])
+
+      const save = useCallback(async () => {
+        const nextGlobal = String(globalDraft ?? '').trim()
+        const nextOverride = String(overrideDraft ?? '').trim()
+        const pending = []
+        if (nextGlobal !== savedRef.current.global) pending.push(['/character-name/global', nextGlobal])
+        if (nextOverride !== savedRef.current.override) pending.push(['/character-name', nextOverride])
+        if (pending.length === 0) {
+          editedRef.current = false
+          setStatus('已保存')
+          return
+        }
+        try {
+          setStatus('保存中…')
+          for (const [path, name] of pending) await apiPost(path, { name })
+          savedRef.current = { global: nextGlobal, override: nextOverride }
+          editedRef.current = false
+          setGlobalDraft(nextGlobal)
+          setOverrideDraft(nextOverride)
+          setStatus('已保存')
+        } catch (error) {
+          setStatus('保存失败')
+        }
+      }, [globalDraft, overrideDraft])
+
+      const markEdited = () => {
+        editedRef.current = true
+        setStatus('未保存')
+      }
+
+      const badgeClass = status === '保存失败' || status === '未保存' ? 'cm-badge cm-badge-warn' : 'cm-badge cm-badge-ok'
+      return h(
+        'div',
+        { className: 'cm-doc' },
+        h(
+          'div',
+          { className: 'cm-doc-head' },
+          h('h3', { className: 'cm-doc-title' }, '角色名字'),
+          h('span', { className: badgeClass }, status),
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: save }, '保存'),
+        ),
+        h(
+          'div',
+          { className: 'cm-doc-summary' },
+          h('p', null, '这是 AI 扮演的那个角色自己的名字（不是你的名字）。填了以后 AI 会知道该怎么自称。'),
+          h('p', null, '「所有对话通用」填一次就对全部对话生效；只有某个对话想用别的名字时，才在下面单独填。这一栏只有你能改，AI 改不了，也不在下面三份文档里。'),
+        ),
+        h(
+          'div',
+          { className: 'cm-field' },
+          h('label', { htmlFor: 'cm-character-name-global' }, '所有对话通用的默认名字'),
+          h('input', {
+            id: 'cm-character-name-global',
+            className: 'cm-input',
+            type: 'text',
+            maxLength: 40,
+            spellCheck: false,
+            placeholder: '例如：大肥鱼',
+            value: globalDraft,
+            onChange: (event) => { markEdited(); setGlobalDraft(event.target.value) },
+            onBlur: () => { if (editedRef.current) save() },
+            onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); save() } },
+          }),
+        ),
+        h(
+          'div',
+          { className: 'cm-field' },
+          h('label', { htmlFor: 'cm-character-name-override' }, '本对话单独的名字（留空 = 跟随上面的默认）'),
+          h('input', {
+            id: 'cm-character-name-override',
+            className: 'cm-input',
+            type: 'text',
+            maxLength: 40,
+            spellCheck: false,
+            placeholder: globalServer ? '留空即使用默认名字（' + globalServer + '）' : '留空即使用默认名字',
+            value: overrideDraft,
+            onChange: (event) => { markEdited(); setOverrideDraft(event.target.value) },
+            onBlur: () => { if (editedRef.current) save() },
+            onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); save() } },
+          }),
+        ),
+        h(
+          'p',
+          { className: 'cm-lock' },
+          effective === '' ? '当前这个对话：未设置名字，AI 不会特别声明自己叫什么。' : '当前这个对话生效名字：' + effective,
+        ),
+      )
+    }
+
     function ConfigTab(props) {
       const snapshot = props.snapshot
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
@@ -544,6 +671,12 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'cm-tab-body' },
+        // 名字在最顶上：先确定「角色是谁」，下面三份文档才有依附对象。
+        h(CharacterNameCard, {
+          globalValue: snapshot.characterNameGlobal || '',
+          overrideValue: snapshot.characterNameOverride || '',
+          effective: snapshot.characterName || '',
+        }),
         h(
           'div',
           { className: 'cm-intro' },
@@ -600,6 +733,7 @@ window.__ModuleLoader__.load({
                 value: Number(draft),
                 reason: reason.trim() || '用户在面板里手动拖动调整',
                 speaker: speaker.name,
+                manual: true,
               })
               notify(result && result.changed
                 ? `${speaker.name} 的好感度 ${result.from} → ${result.value}`
@@ -624,6 +758,7 @@ window.__ModuleLoader__.load({
             value: Number(draft),
             reason: reasonText,
             speaker: speaker.name,
+            manual: true,
           })
           setReason('')
           setOpen(false)
@@ -736,6 +871,7 @@ window.__ModuleLoader__.load({
                 value: Number(draft),
                 reason: reason.trim() || '用户在面板里手动拖动调整',
                 speaker: currentSpeaker?.name,
+                manual: true,
               })
               notify(result && result.changed
                 ? `好感度 ${result.from} → ${result.value}`
@@ -758,7 +894,7 @@ window.__ModuleLoader__.load({
         }
         setBusy(true)
         try {
-          const result = await apiPost('/favorability', { value: Number(draft), reason: reason.trim(), speaker: currentSpeaker?.name })
+          const result = await apiPost('/favorability', { value: Number(draft), reason: reason.trim(), speaker: currentSpeaker?.name, manual: true })
           setReason('')
           notify(result && result.changed ? `好感度 ${result.from} → ${result.value}` : '好感度没有变化')
           await refresh()
@@ -936,7 +1072,20 @@ window.__ModuleLoader__.load({
           { className: 'cm-memory-meta' },
           h('span', null, `保存于第 ${memory.createdInteractionDay ?? '?'} 交互日（${memory.createdDay}）`),
           h('span', null, `剩余 ${memory.remainingDays} 天`),
+          h(
+            'label',
+            { className: 'cm-weight', title: '权重 1~100：越高越靠前、越优先进入上下文（默认 50）。改完按回车或点开别处生效。' },
+            '权重',
+            h(WeightInput, {
+              value: Number(memory.weight) || 50,
+              disabled: busy,
+              onCommit: (next) => act('/memory/weight', { weight: next }, `权重已改为 ${next}`),
+            }),
+          ),
           (memory.tags || []).map((tag) => h('span', { key: tag, className: 'cm-tag' }, tag)),
+          Number(memory.recurringCount) > 1
+            ? h('span', { className: 'cm-tag', title: '用户反复问到的事，达到次数后自动记进全局记忆' }, `已问 ${memory.recurringCount} 次`)
+            : null,
           h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: pin, disabled: busy }, memory.pinned ? '取消置顶' : '置顶'),
           h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: up, disabled: busy, title: '上移一位' }, '↑'),
           h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: down, disabled: busy, title: '下移一位' }, '↓'),
@@ -944,6 +1093,51 @@ window.__ModuleLoader__.load({
           h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: remove, disabled: busy }, '删除'),
         ),
       )
+    }
+
+    /**
+     * 权重输入框（1~100）：不逐键提交，回车 / 失焦 / 步进按钮时才保存，
+     * 避免每敲一个数字就打一次接口。非法值会被夹到 1~100。
+     */
+    function WeightInput(props) {
+      const { value, disabled, onCommit } = props
+      const [draft, setDraft] = useState(String(value))
+      const editingRef = useRef(false)
+      useEffect(() => {
+        if (!editingRef.current) setDraft(String(value))
+      }, [value])
+      const clamp = (raw) => {
+        const number = Math.round(Number(raw))
+        if (!Number.isFinite(number)) return 50
+        return Math.min(100, Math.max(1, number))
+      }
+      const commit = () => {
+        editingRef.current = false
+        const next = clamp(draft)
+        setDraft(String(next))
+        if (next !== value) onCommit(next)
+      }
+      return h('input', {
+        className: 'cm-weight-input',
+        type: 'number',
+        min: 1,
+        max: 100,
+        step: 1,
+        value: draft,
+        disabled,
+        title: '1~100，越大越重要',
+        onChange: (event) => {
+          editingRef.current = true
+          setDraft(event.target.value)
+        },
+        onBlur: commit,
+        onKeyDown: (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        },
+      })
     }
 
     function EvolutionCard(props) {
@@ -984,6 +1178,23 @@ window.__ModuleLoader__.load({
             await refresh()
           } catch (error) {
             notify(`删除失败：${error.message}`, true)
+          } finally {
+            setBusyKey('')
+          }
+        },
+        [notify, refresh],
+      )
+
+      /** 改权重：1~5，越大表示对角色越重要/越强烈。 */
+      const setWeight = useCallback(
+        async (sectionKey, id, weight) => {
+          setBusyKey(sectionKey)
+          try {
+            await apiPost('/evolve/weight', { section: sectionKey, id, weight })
+            notify(`权重已改为 ${weight}`)
+            await refresh()
+          } catch (error) {
+            notify(`改权重失败：${error.message}`, true)
           } finally {
             setBusyKey('')
           }
@@ -1038,6 +1249,16 @@ window.__ModuleLoader__.load({
                           `${entry.day || ''}｜${entry.by === 'ai' ? 'AI 演化' : '用户添加'}${entry.reason ? `｜${entry.reason}` : ''}`,
                         ),
                         h(
+                          'label',
+                          { className: 'cm-weight', title: '权重 1~100：这条对角色有多重要（默认 50）。权重高的会排在提示词前面。改完按回车或点开别处生效。' },
+                          '权重',
+                          h(WeightInput, {
+                            value: Number(entry.weight) || 50,
+                            disabled: busyKey === key,
+                            onCommit: (next) => setWeight(key, entry.id, next),
+                          }),
+                        ),
+                        h(
                           'button',
                           {
                             className: 'cm-btn cm-btn-small cm-btn-ghost',
@@ -1081,6 +1302,36 @@ window.__ModuleLoader__.load({
       const [tags, setTags] = useState('')
       const [busy, setBusy] = useState(false)
       const [showArchived, setShowArchived] = useState(false)
+      // 1.1.0-C：记忆体检（只读扫描 + 一键整理）
+      const [health, setHealth] = useState(null)
+      const [healthBusy, setHealthBusy] = useState('')
+
+      const scanMemoryHealth = useCallback(async () => {
+        setHealthBusy('scan')
+        try {
+          const result = await apiGet('/memory/health')
+          setHealth(result)
+          notify(result.issueCount === 0 ? '记忆很干净，没有发现问题。' : `发现 ${result.issueCount} 个问题（重复/相似/超长/过期）。`)
+        } catch (error) {
+          notify(`体检失败：${error.message}`, true)
+        } finally {
+          setHealthBusy('')
+        }
+      }, [notify])
+
+      const cleanMemoryNow = useCallback(async () => {
+        setHealthBusy('clean')
+        try {
+          const result = await apiPost('/memory/clean', {})
+          setHealth(null)
+          notify(`已整理：保留 ${result.kept} 条${result.archived ? `、归档 ${result.archived} 条（原文可从知识库找回）` : ''}${result.modelUsed ? '（含模型整理）' : '（仅规则去重）'}${result.backup ? `；已备份 ${result.backup}` : ''}`)
+          await refresh()
+        } catch (error) {
+          notify(`整理失败：${error.message}`, true)
+        } finally {
+          setHealthBusy('')
+        }
+      }, [notify, refresh])
 
       const saveImportant = useCallback(async () => {
         if (draft.trim() === '') {
@@ -1109,11 +1360,67 @@ window.__ModuleLoader__.load({
 
       const active = snapshot.memories.active || []
       const archived = snapshot.memories.archived || []
+      const memoryById = new Map(active.map((memory) => [String(memory.id), memory]))
+      const memoryTextOf = (id) => {
+        const memory = memoryById.get(String(id))
+        return memory ? String(memory.text || '').slice(0, 80) : '（已不存在的条目）'
+      }
+      const healthLines = health
+        ? [
+            health.duplicates.length > 0 ? `完全重复：${health.duplicates.length} 组` : '',
+            health.similar.length > 0 ? `高度相似：${health.similar.length} 对` : '',
+            health.long.length > 0 ? `超长：${health.long.length} 条` : '',
+            health.stale.length > 0 ? `过期未归档：${health.stale.length} 条` : '',
+            health.empty.length > 0 ? `空条目：${health.empty.length} 条` : '',
+          ].filter(Boolean)
+        : []
 
       return h(
         'div',
         { className: 'cm-tab-body' },
         h(FavorabilityCard, { snapshot, refresh, notify }),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '记忆体检'), h('span', { className: 'cm-muted' }, '查重 / 相似 / 超长 / 过期')),
+          h('p', { className: 'cm-hint' }, '扫描当前活跃记忆。一键整理只做去重和归档（原文保留在知识库，可检索找回），不改写任何原文；整理前会自动备份 state.json。'),
+          health
+            ? h(
+                'div',
+                { className: 'cm-health' },
+                h('p', { className: 'cm-muted' }, health.issueCount === 0 ? '没有发现问题 ✅' : `共 ${health.issueCount} 个问题：${healthLines.join('；')}`),
+                health.duplicates.length > 0
+                  ? h(
+                      'ul',
+                      { className: 'cm-health-list' },
+                      health.duplicates.slice(0, 5).map((ids, index) =>
+                        h('li', { key: `dup-${index}` }, `重复：${memoryTextOf(ids[0])}${ids.length > 2 ? `（等 ${ids.length} 条）` : ''}`),
+                      ),
+                    )
+                  : null,
+                health.similar.length > 0
+                  ? h(
+                      'ul',
+                      { className: 'cm-health-list' },
+                      health.similar.slice(0, 5).map((pair, index) =>
+                        h('li', { key: `sim-${index}` }, `相似 ${Math.round(pair.score * 100)}%：${memoryTextOf(pair.ids[0])} ↔ ${memoryTextOf(pair.ids[1])}`),
+                      ),
+                    )
+                  : null,
+                health.long.length > 0
+                  ? h('p', { className: 'cm-muted' }, `超长条目：${health.long.slice(0, 5).map((item) => `${item.chars} 字`).join(' / ')}`)
+                  : null,
+              )
+            : null,
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('button', { className: 'cm-btn', type: 'button', onClick: scanMemoryHealth, disabled: Boolean(healthBusy) }, healthBusy === 'scan' ? '扫描中…' : '扫描记忆'),
+            health && health.issueCount > 0
+              ? h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: cleanMemoryNow, disabled: Boolean(healthBusy) }, healthBusy === 'clean' ? '整理中…' : '一键整理')
+              : null,
+          ),
+        ),
         h(EvolutionCard, { snapshot, refresh, notify }),
         h(
           'section',
@@ -1188,9 +1495,12 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [results, setResults] = useState(null)
       const [busy, setBusy] = useState(false)
-      const [files, setFiles] = useState(props.snapshot ? props.snapshot.knowledge : { archive: [], monthly: [], packs: [] })
+      const [files, setFiles] = useState(props.snapshot ? props.snapshot.knowledge : { archive: [], monthly: [], packs: [], hierarchy: [] })
       const [viewer, setViewer] = useState(null)
       const [viewerBusy, setViewerBusy] = useState(false)
+      // 1.1.0-A：多级记忆压缩状态
+      const [hierarchy, setHierarchy] = useState(null)
+      const [hierarchyBusy, setHierarchyBusy] = useState('')
       const packInput = useRef(null)
       const autoPack = (props.snapshot && props.snapshot.autoPack) || { every: 0, turnsSince: 0, totalTurns: 0, count: 0, lastPackAt: null }
 
@@ -1246,6 +1556,42 @@ window.__ModuleLoader__.load({
           }
         },
         [notify],
+      )
+
+      const refreshHierarchy = useCallback(async () => {
+        try {
+          const value = await apiGet('/hierarchy')
+          setHierarchy(value)
+        } catch {
+          setHierarchy(null)
+        }
+      }, [])
+
+      useEffect(() => {
+        void refreshHierarchy()
+      }, [refreshHierarchy, props.snapshot && props.snapshot.updatedAt])
+
+      const runHierarchy = useCallback(
+        async (action) => {
+          setHierarchyBusy(action)
+          try {
+            const result = await apiPost(`/hierarchy/${action}`, {})
+            if (action === 'annual') {
+              notify(result.built ? `已生成第 ${result.yearNo} 年度摘要（${Math.round((result.chars || 0) / 1000)}k 字）` : `未生成：${result.reason || '还不满足条件'}`, !result.built)
+            } else if (action === 'epoch') {
+              notify(result.built ? `已生成跨年沉积（覆盖第 ${result.coversFrom}~${result.coversTo} 年度，第 ${result.compressedTimes} 次压缩）` : `未生成：${result.reason || '还没有年报'}`, !result.built)
+            } else {
+              notify(`已回滚：${result.restored}（备份 ${result.backup}）`)
+            }
+            await refreshHierarchy()
+            if (props.refresh) await props.refresh()
+          } catch (error) {
+            notify(`操作失败：${error.message}`, true)
+          } finally {
+            setHierarchyBusy('')
+          }
+        },
+        [notify, props.refresh, refreshHierarchy],
       )
 
       const renderFiles = (items, emptyText) => {
@@ -1309,6 +1655,53 @@ window.__ModuleLoader__.load({
             }),
             h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: saveAutoPack }, '保存'),
             h('span', { className: 'cm-muted' }, autoPack.every > 0 ? `当前区间 ${autoPack.turnsSince}/${autoPack.every} 轮，已打包 ${autoPack.count} 次${autoPack.lastPackAt ? `；上次 ${formatStamp(autoPack.lastPackAt)}` : ''}` : `已累计 ${autoPack.totalTurns} 轮对话`),
+          ),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '层级记忆（多级压缩）'), h('span', { className: 'cm-muted' }, hierarchy ? `已关闭 ${hierarchy.closedYears} 个年度` : '—')),
+          h(
+            'p',
+            { className: 'cm-hint' },
+            '每 12 个「30 聊天日」周期算一个年度：自动生成「最新年报」；再下一个年度关闭时，把旧跨年沉积和上一个年报融合成新的「跨年沉积」。只保留这两份高层摘要，越老越浓缩；重点原文（置顶记忆）会原样附在每份摘要末尾，不参与概括。原文永远保留在知识库，可继续下钻。',
+          ),
+          hierarchy
+            ? h(
+                'div',
+                { className: 'cm-hierarchy' },
+                h('p', { className: 'cm-muted' }, `周期进度：${hierarchy.packagedCount} 个已打包（${hierarchy.progress}/${hierarchy.cyclesPerYear}），距下个年报还差 ${hierarchy.cyclesPerYear - hierarchy.progress} 个周期`),
+                hierarchy.annual
+                  ? h('p', { className: 'cm-muted' }, `最新年报：第 ${hierarchy.annual.coversFrom}~${hierarchy.annual.coversTo} 年度 · ${Math.round((hierarchy.annual.chars || 0) / 1000)}k 字 · ${formatStamp(hierarchy.annual.createdAt)}（压缩 ${hierarchy.annual.compressedTimes} 次）`)
+                  : h('p', { className: 'cm-muted' }, '还没有年报（满 12 个周期后自动生成）。'),
+                hierarchy.epoch
+                  ? h('p', { className: 'cm-muted' }, `跨年沉积：第 ${hierarchy.epoch.coversFrom}~${hierarchy.epoch.coversTo} 年度 · ${Math.round((hierarchy.epoch.chars || 0) / 1000)}k 字 · ${formatStamp(hierarchy.epoch.createdAt)}（第 ${hierarchy.epoch.compressedTimes} 次压缩）`)
+                  : h('p', { className: 'cm-muted' }, '还没有跨年沉积（第二个年度关闭时自动生成）。'),
+                hierarchy.lastError ? h('p', { className: 'cm-muted' }, `上次自动推进失败：${hierarchy.lastError}`) : null,
+                hierarchy.files && hierarchy.files.length > 0
+                  ? h(
+                      'div',
+                      { className: 'cm-kb-list' },
+                      hierarchy.files.map((item) =>
+                        h(
+                          'button',
+                          { key: item.path, className: 'cm-kb-item', type: 'button', onClick: () => openFile(item.path) },
+                          h('span', { className: 'cm-kb-name' }, item.path.split('/').pop()),
+                          h('span', { className: 'cm-muted' }, `${Math.round((item.bytes || 0) / 1000)}k 字`),
+                        ),
+                      ),
+                    )
+                  : null,
+              )
+            : h('p', { className: 'cm-muted' }, '读取中…'),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('button', { className: 'cm-btn', type: 'button', onClick: () => runHierarchy('annual'), disabled: Boolean(hierarchyBusy) }, hierarchyBusy === 'annual' ? '生成中…' : '生成年度摘要'),
+            h('button', { className: 'cm-btn', type: 'button', onClick: () => runHierarchy('epoch'), disabled: Boolean(hierarchyBusy) }, hierarchyBusy === 'epoch' ? '压缩中…' : '融合跨年沉积'),
+            hierarchy && (hierarchy.annual || hierarchy.epoch)
+              ? h('button', { className: 'cm-btn cm-btn-ghost', type: 'button', onClick: () => runHierarchy('rollback'), disabled: Boolean(hierarchyBusy) }, '回滚到最近备份')
+              : null,
           ),
         ),
         h(
@@ -1380,6 +1773,12 @@ window.__ModuleLoader__.load({
         h(
           'section',
           { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '层级摘要（年报 / 跨年沉积）'), h('span', { className: 'cm-muted' }, `${(files.hierarchy || []).length} 份`)),
+          renderFiles(files.hierarchy || [], '满 12 个周期自动生成年报；之后每关闭一个新年度，滚动生成一份跨年沉积。'),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
           h('div', { className: 'cm-card-head' }, h('h3', null, '按日期归档'), h('span', { className: 'cm-muted' }, `${files.archive.length} 天`)),
           renderFiles(files.archive, '暂未产生归档记录。'),
         ),
@@ -1393,6 +1792,8 @@ window.__ModuleLoader__.load({
       const { snapshot, notify } = props
       const [busy, setBusy] = useState('')
       const [imported, setImported] = useState(null)
+      // 1.1.0-B：导入前自动整理记忆（默认开）
+      const [cleanMemory, setCleanMemory] = useState(true)
       const fileRef = useRef(null)
 
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
@@ -1510,8 +1911,20 @@ window.__ModuleLoader__.load({
         }
         setBusy('import')
         try {
-          const result = await apiPost('/import', { bundle: imported.bundle, merge: overwrite ? false : true })
-          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条${result.conversationSkipped ? `（较早的 ${result.conversationSkipped} 条已跳过）` : ''}` : ''}`)
+          const result = await apiPost('/import', {
+            bundle: imported.bundle,
+            merge: overwrite ? false : true,
+            cleanMemory: cleanMemory === true,
+          })
+          const clean = result.clean
+          let cleanText = ''
+          if (clean && !clean.error) {
+            cleanText = `；记忆整理：保留 ${clean.kept} 条${clean.dropped ? `、归档 ${clean.dropped} 条（原文可检索找回）` : ''}${clean.modelUsed ? '（含模型整理）' : '（仅规则去重）'}`
+            if (clean.backup) cleanText += `，已备份 ${clean.backup}`
+          } else if (clean && clean.error) {
+            cleanText = `；记忆整理未执行（${clean.error}），已按原样导入`
+          }
+          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条${result.conversationSkipped ? `（较早的 ${result.conversationSkipped} 条已跳过）` : ''}` : ''}${cleanText}`)
           setImported(null)
           if (props.onReload) await props.onReload()
         } catch (error) {
@@ -1575,6 +1988,17 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条${imported.conversationChars ? `（约 ${Math.round(imported.conversationChars / 1000)}k 字）` : ''}`)),
                 ),
                 h('p', { className: 'cm-muted' }, '选一个导入方式：合并会保留当前已有内容，只补充缺的；覆盖会用这份文档替换当前对话的记忆。'),
+                h(
+                  'label',
+                  { className: 'cm-clean-option' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: cleanMemory,
+                    disabled: busy === 'import',
+                    onChange: (event) => setCleanMemory(event.target.checked),
+                  }),
+                  h('span', null, '导入前自动整理记忆（去重 + 一次模型排序/归档；重点原文只去重不改写，失败会按原样导入）'),
+                ),
                 h(
                   'div',
                   { className: 'cm-actions' },
@@ -2118,6 +2542,23 @@ window.__ModuleLoader__.load({
           ? h('div', { className: `cm-banner${notice.isError ? ' cm-banner-error' : ' cm-banner-ok'}` }, notice.message)
           : null,
         h('div', { className: 'cm-body' }, body),
+        // 底部 Star 入口：只放一个可见链接，用户自己点，不做任何自动行为。
+        h(
+          'div',
+          { className: 'cm-footer' },
+          h('span', { className: 'cm-muted' }, '觉得好用的话，可以去'),
+          h(
+            'a',
+            {
+              className: 'cm-footer-link',
+              href: REPO_URL,
+              target: '_blank',
+              rel: 'noreferrer noopener',
+            },
+            'GitHub 点个 Star ⭐',
+          ),
+          h('span', { className: 'cm-muted' }, '支持一下。'),
+        ),
       )
     }
 

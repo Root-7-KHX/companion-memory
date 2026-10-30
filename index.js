@@ -19,6 +19,7 @@ import { installAgentPrompt } from './lib/prompt.js'
 import { registerTool } from './lib/tool.js'
 import { registerTracking } from './lib/tracking.js'
 import { registerContextCompression } from './lib/context-compress.js'
+import { registerHierarchy } from './lib/hierarchy.js'
 import { registerDynamicContext } from './lib/dynamic-context.js'
 import { registerLeanTools } from './lib/lean-tools.js'
 import { registerWebApi } from './lib/api.js'
@@ -37,6 +38,7 @@ export function apply(ctx, config) {
   ctx.effect(() => registerDynamicContext(ctx, manager), 'companion-memory: per-turn dynamic context')
   ctx.effect(() => registerLeanTools(ctx, manager), 'companion-memory: lean toolset for enabled conversations')
   ctx.effect(() => registerContextCompression(ctx, manager, config ?? {}), 'companion-memory: conversation context compression')
+  ctx.effect(() => registerHierarchy(ctx, manager), 'companion-memory: hierarchy memory compression')
   ctx.effect(() => registerWebApi(ctx, manager), 'companion-memory: /companion/api routes')
 
   return () => {
