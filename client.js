@@ -213,6 +213,36 @@ window.__ModuleLoader__.load({
       activeSession = typeof sessionId === 'string' ? sessionId : ''
     }
 
+    /** 顶部视图 → 侧边栏面板的快速跳转：记住要打开的页签和对话，并切到伴侣记忆面板。 */
+    let pendingPanelTab = ''
+    let pendingPanelSession = ''
+    function openCompanionPanel(tabId, sessionId) {
+      pendingPanelTab = typeof tabId === 'string' && tabId !== '' ? tabId : 'config'
+      pendingPanelSession = typeof sessionId === 'string' ? sessionId : ''
+      try {
+        window.dispatchEvent(new CustomEvent('companion-memory:set-tab', { detail: { tab: pendingPanelTab, sessionId: pendingPanelSession } }))
+      } catch {
+        // CustomEvent 不可用时只靠 pendingPanelTab 生效
+      }
+      try {
+        const layout = (hostCtx && typeof hostCtx.get === 'function' ? hostCtx.get('layout') : null)
+          || (hostCtx && hostCtx.layout)
+        if (layout && typeof layout.selectPanel === 'function') {
+          layout.selectPanel(PLUGIN_ID)
+          return
+        }
+      } catch {
+        // 落到下面的兜底
+      }
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('companion-memory:open-panel'))
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     function withSession(path) {
       if (activeSession === '') return path
       const glue = path.includes('?') ? '&' : '?'
@@ -660,6 +690,177 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 情绪系统卡片：每种情绪各一条独立进度条（0~100，可同时存在）。
+     * editable=true（配置页）：可以手动拉动每条 + 写理由保存，也能增删情绪种类。
+     */
+    function EmotionCard(props) {
+      const { snapshot, refresh, notify, editable } = props
+      const emotion = (snapshot && snapshot.emotion) || { types: [], reason: '', updatedAtLocal: '' }
+      const types = Array.isArray(emotion.types) ? emotion.types : []
+      const [draft, setDraft] = useState({})
+      const [reason, setReason] = useState('')
+      const [newType, setNewType] = useState('')
+      const [busy, setBusy] = useState(false)
+      const palette = ['#22c55e', '#f59e0b', '#38bdf8', '#8b5cf6', '#ef4444', '#14b8a6', '#f472b6', '#84cc16', '#6b7280']
+
+      const draftValue = (type) => (Number.isFinite(Number(draft[type.key])) ? Number(draft[type.key]) : Number(type.value) || 0)
+
+      const submit = useCallback(async () => {
+        const changes = {}
+        for (const type of types) {
+          const value = draftValue(type)
+          if (value !== (Number(type.value) || 0)) changes[type.key] = value
+        }
+        if (Object.keys(changes).length === 0) { notify('没有改动任何情绪', true); return }
+        if (reason.trim() === '') { notify('手动改情绪要写个理由', true); return }
+        setBusy(true)
+        try {
+          await apiPost('/emotion', { emotions: changes, reason: reason.trim() })
+          setReason('')
+          setDraft({})
+          notify('情绪表已更新')
+          await refresh()
+        } catch (error) {
+          notify(`更新失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [draft, reason, types, notify, refresh])
+
+      const addType = useCallback(async () => {
+        const label = newType.trim()
+        if (label === '') { notify('先写一个情绪名', true); return }
+        setBusy(true)
+        try {
+          await apiPost('/emotion/types', { add: [{ label }] })
+          setNewType('')
+          notify(`已新建情绪「${label}」`)
+          await refresh()
+        } catch (error) {
+          notify(`新建失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [newType, notify, refresh])
+
+      const removeType = useCallback(async (label) => {
+        setBusy(true)
+        try {
+          await apiPost('/emotion/types', { remove: [label] })
+          notify(`已删除情绪「${label}」`)
+          await refresh()
+        } catch (error) {
+          notify(`删除失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [notify, refresh])
+
+      const strongest = types.slice()
+        .filter((type) => Number(type.value) > 0)
+        .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))[0]
+
+      return h(
+        'section',
+        { className: 'cm-card' },
+        h(
+          'div',
+          { className: 'cm-card-head' },
+          h('h3', null, '情绪表'),
+          h('span', { className: 'cm-muted' }, '每种情绪独立 0~100 · 可同时存在 · 每句实时变化 · 最高优先级参考'),
+        ),
+        h('p', { className: 'cm-hint' }, '这不是长期关系（好感度/羁绊在下面），是 AI 此刻逐条的心情：可以同时「开心 70 + 悲伤 30」。AI 会优先按最强的几种情绪决定语气和态度。'),
+        types.length === 0
+          ? h('p', { className: 'cm-muted' }, '暂无情绪种类。')
+          : h(
+            'div',
+            { style: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 } },
+            types.map((type, index) => {
+              const value = draftValue(type)
+              const color = palette[index % palette.length]
+              return h(
+                'div',
+                { key: type.key, style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                h('span', { style: { width: 52, fontSize: 13, color: value > 0 ? color : '#6b7280', fontWeight: value > 0 ? 600 : 400 }, title: type.desc || '' }, type.label),
+                h(
+                  'div',
+                  { style: { position: 'relative', flex: 1, height: 10, borderRadius: 5, background: '#eceef3', overflow: 'hidden' } },
+                  h('div', { style: { position: 'absolute', left: 0, top: 0, bottom: 0, width: `${value}%`, background: color, opacity: value > 0 ? 1 : 0, transition: 'width .25s' } }),
+                ),
+                h('span', { style: { width: 34, textAlign: 'right', fontSize: 12, color: '#4b5563' } }, String(value)),
+                editable
+                  ? h('input', { className: 'cm-slider', style: { width: 100 }, type: 'range', min: 0, max: 100, step: 1, value, onChange: (event) => setDraft((prev) => ({ ...prev, [type.key]: Number(event.target.value) })) })
+                  : null,
+                editable
+                  ? h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', title: '删除这种情绪（有对话在用时会失败）', onClick: () => removeType(type.label), disabled: busy }, '✕')
+                  : null,
+              )
+            }),
+          ),
+        h(
+          'div',
+          { style: { display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, fontSize: 12, color: '#6b7280' } },
+          strongest ? h('span', null, `最强：${strongest.label} ${strongest.value}`) : h('span', null, '当前全部为 0（中性）'),
+          emotion.updatedAtLocal ? h('span', null, `更新：${emotion.updatedAtLocal}`) : null,
+          emotion.reason ? h('span', null, `原因：${emotion.reason}`) : null,
+        ),
+        editable
+          ? h(
+            'div',
+            { style: { marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 } },
+            h(
+              'div',
+              { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+              h('input', { className: 'cm-input', style: { width: 150 }, type: 'text', maxLength: 6, placeholder: '新情绪名，如 嫉妒', value: newType, onChange: (event) => setNewType(event.target.value) }),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: addType, disabled: busy }, '新建情绪'),
+              h('span', { className: 'cm-muted' }, '（情绪种类全局共享，AI 也能自己加）'),
+            ),
+            h('input', { className: 'cm-input', type: 'text', placeholder: '手动改情绪的理由（必填）', value: reason, maxLength: 200, onChange: (event) => setReason(event.target.value) }),
+            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: submit, disabled: busy }, busy ? '提交中…' : '保存情绪表'),
+          )
+          : null,
+      )
+    }
+
+    /** 情绪页：独立大类 —— 只放情绪表 + 最近变化记录。 */
+    function EmotionTab(props) {
+      const { snapshot, refresh, notify } = props
+      if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
+      const emotion = snapshot.emotion || { types: [], history: [] }
+      const history = Array.isArray(emotion.history) ? emotion.history : []
+      return h(
+        'div',
+        { className: 'cm-tab-body' },
+        h('div', { className: 'cm-intro' }, '情绪表是 AI 此刻的即时心情：每种情绪各自一条 0~100 的进度条，可以同时存在（比如又开心又难过）。AI 每轮会自己更新，并优先按这张表决定语气和态度；你也可以在这里手动调整，或新建/删除情绪种类。'),
+        h(EmotionCard, { snapshot, refresh, notify, editable: true }),
+        history.length > 0
+          ? h(
+            'section',
+            { className: 'cm-card' },
+            h('div', { className: 'cm-card-head' }, h('h3', null, '最近情绪变化'), h('span', { className: 'cm-muted' }, '最近的 10 次更新')),
+            h(
+              'ul',
+              { className: 'cm-history' },
+              history.slice(0, 10).map((entry, index) => {
+                const changes = entry.changes && typeof entry.changes === 'object'
+                  ? Object.entries(entry.changes).map(([key, value]) => `${key} ${value}`).join('、')
+                  : ''
+                return h(
+                  'li',
+                  { key: `${entry.at}-${index}` },
+                  h('span', { className: 'cm-muted' }, formatStamp(entry.at)),
+                  h('span', null, changes || '（无变化）'),
+                  h('span', { className: 'cm-muted' }, entry.reason || ''),
+                  entry.by === 'user' ? h('span', { className: 'cm-muted' }, '（手动）') : null,
+                )
+              }),
+            ),
+          )
+          : null,
+      )
+    }
+
     function ConfigTab(props) {
       const snapshot = props.snapshot
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
@@ -847,7 +1048,7 @@ window.__ModuleLoader__.load({
     }
 
     function FavorabilityCard(props) {
-      const { snapshot, refresh, notify } = props
+      const { snapshot, refresh, notify, showDetails } = props
       const [draft, setDraft] = useState(snapshot.favorability)
       const [reason, setReason] = useState('')
       const [busy, setBusy] = useState(false)
@@ -991,6 +1192,14 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
+        showDetails && speakers.length > 0
+          ? h(
+              'div',
+              { className: 'cm-speaker-vectors' },
+              h('p', { className: 'cm-hint' }, '每个人的多维评价（AI 自己打分，0~100）：'),
+              speakers.map((item) => h('p', { key: item.id, className: 'cm-muted' }, `${item.name}：${item.vectorText || '（暂无）'}`)),
+            )
+          : null,
         speakers.length > 1
           ? h(
               'div',
@@ -1029,6 +1238,12 @@ window.__ModuleLoader__.load({
                   { key: `${change.at}-${index}` },
                   h('span', { className: 'cm-muted' }, formatStamp(change.at)),
                   h('span', { className: `cm-history-value ${favourTone(change.value)}` }, `${change.value}（${signed(change.value - change.from)}）`),
+                  change.stepClamped
+                    ? h('span', { className: 'cm-muted', title: '好感度是循序渐进的：单轮降幅超过上限时按上限结算' }, `目标值 ${change.requested}（单轮最多降 ${change.stepLimit}，按 ${change.clampedTo} 结算）`)
+                    : null,
+                  change.absorbed
+                    ? h('span', { className: 'cm-muted', title: 'AI 这次给出的目标值被「先扣羁绊」规则吸收了' }, `目标值 ${change.requested ?? Number(change.value) - Number(change.absorbed)}｜羁绊抵消 ${change.absorbed}`)
+                    : null,
                   change.bond !== undefined && change.bond !== null
                     ? h('span', { className: 'cm-history-bond' }, `羁绊 ${signed(Number(change.bondFrom) || 0)} → ${signed(Number(change.bond) || 0)}`)
                     : null,
@@ -1041,7 +1256,7 @@ window.__ModuleLoader__.load({
     }
 
     function MemoryCard(props) {
-      const { memory } = props
+      const { memory, showDetails } = props
       const [busy, setBusy] = useState(false)
       const act = useCallback(
         async (path, body, message) => {
@@ -1070,18 +1285,24 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'cm-memory-meta' },
-          h('span', null, `保存于第 ${memory.createdInteractionDay ?? '?'} 交互日（${memory.createdDay}）`),
+          h('span', null, `${memory.createdAtLocal ?? memory.createdDay ?? '时间未知'}｜第 ${memory.createdInteractionDay ?? '?'} 交互日`),
+          // 向量/权重默认藏在后台，点「显示细节」才展开，避免面板被长串数字刷屏。
+          showDetails && memory.vectorText
+            ? h('span', { className: 'cm-tag', title: '记忆向量（AI 自己打分）：情感/重要/亲密/敏感/长期/类别' }, memory.vectorText)
+            : null,
           h('span', null, `剩余 ${memory.remainingDays} 天`),
-          h(
-            'label',
-            { className: 'cm-weight', title: '权重 1~100：越高越靠前、越优先进入上下文（默认 50）。改完按回车或点开别处生效。' },
-            '权重',
-            h(WeightInput, {
-              value: Number(memory.weight) || 50,
-              disabled: busy,
-              onCommit: (next) => act('/memory/weight', { weight: next }, `权重已改为 ${next}`),
-            }),
-          ),
+          showDetails
+            ? h(
+              'label',
+              { className: 'cm-weight', title: '权重 1~100：越高越靠前、越优先进入上下文（默认 50）。改完按回车或点开别处生效。' },
+              '权重',
+              h(WeightInput, {
+                value: Number(memory.weight) || 50,
+                disabled: busy,
+                onCommit: (next) => act('/memory/weight', { weight: next }, `权重已改为 ${next}`),
+              }),
+            )
+            : null,
           (memory.tags || []).map((tag) => h('span', { key: tag, className: 'cm-tag' }, tag)),
           Number(memory.recurringCount) > 1
             ? h('span', { className: 'cm-tag', title: '用户反复问到的事，达到次数后自动记进全局记忆' }, `已问 ${memory.recurringCount} 次`)
@@ -1141,7 +1362,7 @@ window.__ModuleLoader__.load({
     }
 
     function EvolutionCard(props) {
-      const { snapshot, refresh, notify } = props
+      const { snapshot, refresh, notify, showDetails } = props
       const evolution = snapshot.evolution || { order: [], sections: {}, total: 0, limit: 12 }
       const order = Array.isArray(evolution.order) ? evolution.order : []
       const [drafts, setDrafts] = useState({})
@@ -1248,16 +1469,18 @@ window.__ModuleLoader__.load({
                           null,
                           `${entry.day || ''}｜${entry.by === 'ai' ? 'AI 演化' : '用户添加'}${entry.reason ? `｜${entry.reason}` : ''}`,
                         ),
-                        h(
-                          'label',
-                          { className: 'cm-weight', title: '权重 1~100：这条对角色有多重要（默认 50）。权重高的会排在提示词前面。改完按回车或点开别处生效。' },
-                          '权重',
-                          h(WeightInput, {
-                            value: Number(entry.weight) || 50,
-                            disabled: busyKey === key,
-                            onCommit: (next) => setWeight(key, entry.id, next),
-                          }),
-                        ),
+                        showDetails
+                          ? h(
+                            'label',
+                            { className: 'cm-weight', title: '权重 1~100：这条对角色有多重要（默认 50）。权重高的会排在提示词前面。改完按回车或点开别处生效。' },
+                            '权重',
+                            h(WeightInput, {
+                              value: Number(entry.weight) || 50,
+                              disabled: busyKey === key,
+                              onCommit: (next) => setWeight(key, entry.id, next),
+                            }),
+                          )
+                          : null,
                         h(
                           'button',
                           {
@@ -1302,6 +1525,8 @@ window.__ModuleLoader__.load({
       const [tags, setTags] = useState('')
       const [busy, setBusy] = useState(false)
       const [showArchived, setShowArchived] = useState(false)
+      // 向量/权重默认藏在后台，需要时再展开（用户不想面板被长串数字占满）。
+      const [showDetails, setShowDetails] = useState(false)
       // 1.1.0-C：记忆体检（只读扫描 + 一键整理）
       const [health, setHealth] = useState(null)
       const [healthBusy, setHealthBusy] = useState('')
@@ -1378,7 +1603,7 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'cm-tab-body' },
-        h(FavorabilityCard, { snapshot, refresh, notify }),
+        h(FavorabilityCard, { snapshot, refresh, notify, showDetails }),
         h(
           'section',
           { className: 'cm-card' },
@@ -1421,7 +1646,7 @@ window.__ModuleLoader__.load({
               : null,
           ),
         ),
-        h(EvolutionCard, { snapshot, refresh, notify }),
+        h(EvolutionCard, { snapshot, refresh, notify, showDetails }),
         h(
           'section',
           { className: 'cm-card' },
@@ -1429,12 +1654,24 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'cm-card-head' },
             h('h3', null, '全局活跃记忆'),
-            h('span', { className: 'cm-muted' }, `${snapshot.memories.activeCount}/${snapshot.memories.limit} 条上限`),
+            h(
+              'div',
+              { className: 'cm-actions' },
+              h('span', { className: 'cm-muted' }, `${snapshot.memories.activeCount}/${snapshot.memories.limit} 条上限`),
+              h(
+                'button',
+                { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => setShowDetails(!showDetails) },
+                showDetails ? '隐藏向量/权重' : '显示向量/权重',
+              ),
+            ),
           ),
           h('p', { className: 'cm-hint' }, '重点原文保持原样，AI 只能决定保存/调取，不能改写。满 30 个交互日后自动移入知识库。'),
+          showDetails && (snapshot.vectorDimensions || []).length > 0
+            ? h('p', { className: 'cm-hint' }, `AI 自己建的全局向量维度（所有对话通用）：${(snapshot.vectorDimensions || []).map((item) => `${item.label}${item.desc ? `（${item.desc}）` : ''}·${item.usedBy ?? 0}条在用`).join('、')}`)
+            : null,
           active.length === 0
             ? h('p', { className: 'cm-muted' }, '暂无活跃记忆。')
-            : h('div', { className: 'cm-memory-list' }, active.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify }))),
+            : h('div', { className: 'cm-memory-list' }, active.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails }))),
         ),
         h(
           'section',
@@ -1794,6 +2031,7 @@ window.__ModuleLoader__.load({
       const [imported, setImported] = useState(null)
       // 1.1.0-B：导入前自动整理记忆（默认开）
       const [cleanMemory, setCleanMemory] = useState(true)
+      const [digestChat, setDigestChat] = useState(true)
       const fileRef = useRef(null)
 
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
@@ -1915,6 +2153,7 @@ window.__ModuleLoader__.load({
             bundle: imported.bundle,
             merge: overwrite ? false : true,
             cleanMemory: cleanMemory === true,
+            digestChat: digestChat === true,
           })
           const clean = result.clean
           let cleanText = ''
@@ -1924,7 +2163,19 @@ window.__ModuleLoader__.load({
           } else if (clean && clean.error) {
             cleanText = `；记忆整理未执行（${clean.error}），已按原样导入`
           }
-          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条${result.conversationSkipped ? `（较早的 ${result.conversationSkipped} 条已跳过）` : ''}` : ''}${cleanText}`)
+          let digestText = ''
+          if (result.digest) {
+            if (result.digest.error) {
+              digestText = `；AI 回顾未执行（${result.digest.error}）`
+            } else if (result.digest.batches > 0) {
+              digestText = `；AI 回顾了聊天原文 ${result.digest.batches} 批（约 ${Math.round((result.digest.chars || 0) / 1000)}k 字），新增记忆 ${result.digest.memoriesAdded} 条`
+              if (result.digest.duplicates > 0) digestText += `（${result.digest.duplicates} 条重复已跳过）`
+              if (result.digest.batchesSkipped > 0) digestText += `；另有 ${result.digest.batchesSkipped} 批超出上限未过`
+            } else if (result.digest.batchesSkipped > 0) {
+              digestText = `；AI 回顾跳过：${result.digest.batchesSkipped} 批超出上限`
+            }
+          }
+          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条${result.conversationSkipped ? `（较早的 ${result.conversationSkipped} 条已跳过）` : ''}` : ''}${cleanText}${digestText}`)
           setImported(null)
           if (props.onReload) await props.onReload()
         } catch (error) {
@@ -1998,6 +2249,17 @@ window.__ModuleLoader__.load({
                     onChange: (event) => setCleanMemory(event.target.checked),
                   }),
                   h('span', null, '导入前自动整理记忆（去重 + 一次模型排序/归档；重点原文只去重不改写，失败会按原样导入）'),
+                ),
+                h(
+                  'label',
+                  { className: 'cm-clean-option' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: digestChat,
+                    disabled: busy === 'import',
+                    onChange: (event) => setDigestChat(event.target.checked),
+                  }),
+                  h('span', null, '导入后让 AI 把聊天原文全部过一遍（分批提炼成记忆，会多花几次模型调用）'),
                 ),
                 h(
                   'div',
@@ -2191,6 +2453,7 @@ window.__ModuleLoader__.load({
 
     const TABS = [
       { id: 'config', label: '配置' },
+      { id: 'emotion', label: '情绪' },
       { id: 'memory', label: '记忆' },
       { id: 'knowledge', label: '知识库' },
       { id: 'backup', label: '备份' },
@@ -2201,6 +2464,149 @@ window.__ModuleLoader__.load({
     /** 保存 client 侧 ctx，用来调用宿主的 uiWorkspace.openSession 把新对话直接打开。 */
     let hostCtx = null
 
+    /**
+     * 顶部栏「伴侣记忆」视图（conversation.view 槽位）：
+     * 跟随当前对话，只读速览这个对话的情绪表 / 好感度 / 活跃记忆。
+     * 所有请求都显式带 session 参数，避免和侧边栏面板的 activeSession 互相干扰。
+     */
+    function CompanionConversationView(props) {
+      const sessionId = typeof props?.sessionId === 'string' ? props.sessionId : ''
+      const [snapshot, setSnapshot] = useState(null)
+      const [error, setError] = useState('')
+      const [notice, setNotice] = useState('')
+      const [busy, setBusy] = useState(false)
+
+      const request = useCallback(async (path, init) => {
+        const glue = path.includes('?') ? '&' : '?'
+        const url = sessionId === ''
+          ? `${API_BASE}${path}`
+          : `${API_BASE}${path}${glue}session=${encodeURIComponent(sessionId)}`
+        const response = await fetch(url, {
+          credentials: 'same-origin',
+          headers: { accept: 'application/json' },
+          ...(init || {}),
+        })
+        return unwrap(response)
+      }, [sessionId])
+
+      const load = useCallback(async () => {
+        if (sessionId === '') { setSnapshot({ enabled: false, sessionId: null }); setError(''); return }
+        try {
+          const value = await request('/state')
+          setSnapshot(value)
+          setError('')
+        } catch (caught) {
+          setError(caught.message)
+        }
+      }, [request, sessionId])
+
+      useEffect(() => {
+        load()
+        const timer = setInterval(load, POLL_MS)
+        return () => clearInterval(timer)
+      }, [load])
+
+      const enable = useCallback(async () => {
+        setBusy(true)
+        try {
+          await request('/enable', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ enabled: true }),
+          })
+          setNotice('已开启本对话的伴侣记忆')
+          await load()
+        } catch (caught) {
+          setNotice(`开启失败：${caught.message}`)
+        } finally {
+          setBusy(false)
+        }
+      }, [request, load])
+
+      if (error !== '') {
+        return h('div', { className: 'cm-root' }, h('div', { className: 'cm-banner cm-banner-error' }, `伴侣记忆连接失败：${error}`))
+      }
+      if (!snapshot) {
+        return h('div', { className: 'cm-root' }, h('div', { className: 'cm-empty' }, '加载伴侣记忆…'))
+      }
+      if (snapshot.enabled !== true) {
+        return h(
+          'div',
+          { className: 'cm-root' },
+          h(
+            'div',
+            { className: 'cm-guide' },
+            h('h2', null, '这个对话还没有开启伴侣记忆'),
+            h('p', null, '开启后，这个对话会有独立的情绪表、好感度、记忆与知识库；其他对话各自独立、互不影响。'),
+            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: enable, disabled: busy }, busy ? '开启中…' : '开启本对话'),
+            notice ? h('p', { className: 'cm-muted' }, notice) : null,
+          ),
+        )
+      }
+
+      const memories = (snapshot.memories && snapshot.memories.active) || []
+      const speakers = snapshot.speakers || []
+      const currentSpeaker = speakers.find((item) => item.isCurrent) || speakers[0] || null
+      return h(
+        'div',
+        { className: 'cm-root' },
+        h(
+          'div',
+          { className: 'cm-body' },
+          h(
+            'div',
+            { className: 'cm-tab-body' },
+            h('div', { className: 'cm-intro' }, '这里是当前对话的伴侣记忆速览（只读）；点下面的按钮可以跳到左侧栏面板里调整。'),
+            h(
+              'div',
+              { className: 'cm-actions' },
+              h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: () => openCompanionPanel('emotion', sessionId) }, '去调整情绪'),
+              h('button', { className: 'cm-btn', type: 'button', onClick: () => openCompanionPanel('memory', sessionId) }, '去调整记忆'),
+              h('button', { className: 'cm-btn', type: 'button', onClick: () => openCompanionPanel('config', sessionId) }, '打开完整面板'),
+            ),
+            h(EmotionCard, { snapshot, refresh: load, notify: (message) => setNotice(message), editable: false }),
+            h(
+              'section',
+              { className: 'cm-card' },
+              h('div', { className: 'cm-card-head' }, h('h3', null, '好感度与关系'), h('span', { className: 'cm-muted' }, '对当前说话人')),
+              h(
+                'div',
+                { style: { display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 8, flexWrap: 'wrap' } },
+                h('span', { style: { fontSize: 24, fontWeight: 700, color: favourTone(snapshot.favorability || 0) } }, signed(snapshot.favorability || 0)),
+                h('span', { className: 'cm-muted' }, `羁绊 ${signed(Number(currentSpeaker && currentSpeaker.bond) || 0)}`),
+                currentSpeaker && currentSpeaker.vectorText ? h('span', { className: 'cm-muted' }, currentSpeaker.vectorText) : null,
+              ),
+            ),
+            h(
+              'section',
+              { className: 'cm-card' },
+              h('div', { className: 'cm-card-head' }, h('h3', null, `活跃记忆（${memories.length}）`), h('span', { className: 'cm-muted' }, '按权重排序')),
+              memories.length === 0
+                ? h('p', { className: 'cm-muted' }, '这个对话还没有活跃记忆。')
+                : h(
+                  'div',
+                  { className: 'cm-memory-list' },
+                  memories.slice(0, 12).map((memory) => h(
+                    'div',
+                    { key: memory.id, className: 'cm-memory' },
+                    h('div', { className: 'cm-memory-text' }, memory.text),
+                    h(
+                      'div',
+                      { className: 'cm-memory-meta' },
+                      h('span', null, memory.createdAtLocal || memory.createdDay || ''),
+                      h('span', null, `权重 ${Number(memory.weight) || 50}`),
+                      memory.vectorText ? h('span', { className: 'cm-tag' }, memory.vectorText) : null,
+                    ),
+                  )),
+                ),
+              memories.length > 12 ? h('p', { className: 'cm-muted' }, `还有 ${memories.length - 12} 条…`) : null,
+            ),
+            notice ? h('div', { className: 'cm-banner' }, notice) : null,
+          ),
+        ),
+      )
+    }
+
     function CompanionPanel() {
       const [snapshot, setSnapshot] = useState(null)
       const [sessions, setSessions] = useState(null)
@@ -2208,7 +2614,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('')
       const [notice, setNotice] = useState(null)
       const [busy, setBusy] = useState(false)
-      const [tab, setTab] = useState('config')
+      const [tab, setTab] = useState(pendingPanelTab || 'config')
       const [pickerOpen, setPickerOpen] = useState(false)
       const [collapsedGroups, setCollapsedGroups] = useState({})
       const [creating, setCreating] = useState('')
@@ -2236,8 +2642,11 @@ window.__ModuleLoader__.load({
           setSessions(list)
           const items = (list && list.items) || []
           const known = new Set(items.map((item) => item.id))
-          let target = sessionRef.current
-          if (target && !known.has(target)) target = ''
+          // 从顶部视图跳过来时会带一个明确的目标对话，优先用它。
+          const forced = pendingPanelSession
+          pendingPanelSession = ''
+          let target = forced || sessionRef.current
+          if (!forced && target && !known.has(target)) target = ''
           if (!target && list && list.current && known.has(list.current)) target = list.current
           if (!target) target = items[0]?.id || ''
           sessionRef.current = target
@@ -2262,6 +2671,22 @@ window.__ModuleLoader__.load({
           clearInterval(timer)
         }
       }, [refresh])
+
+      useEffect(() => {
+        const handler = (event) => {
+          const detail = event && event.detail
+          const nextTab = typeof detail === 'string' ? detail : detail && detail.tab
+          const nextSession = detail && typeof detail === 'object' ? detail.sessionId : ''
+          if (typeof nextTab === 'string' && nextTab !== '') setTab(nextTab)
+          if (typeof nextSession === 'string' && nextSession !== '') {
+            sessionRef.current = nextSession
+            setSessionId(nextSession)
+            loadState(nextSession).catch(() => {})
+          }
+        }
+        window.addEventListener('companion-memory:set-tab', handler)
+        return () => window.removeEventListener('companion-memory:set-tab', handler)
+      }, [loadState])
 
       useEffect(() => {
         if (!notice) return undefined
@@ -2391,7 +2816,9 @@ window.__ModuleLoader__.load({
           h('p', null, '新对话默认是关闭的；你可以在上面的下拉框里切换到别的对话，也可以随时关闭本对话（数据会保留，不会删除）。'),
         )
       } else if (tab === 'config') {
-        body = h(ConfigTab, { snapshot })
+        body = h(ConfigTab, { snapshot, refresh, notify })
+      } else if (tab === 'emotion') {
+        body = h(EmotionTab, { snapshot, refresh, notify })
       } else if (tab === 'memory') {
         body = h(MemoryTab, { snapshot, refresh, notify })
       } else if (tab === 'knowledge') {
@@ -2607,6 +3034,26 @@ window.__ModuleLoader__.load({
             ),
           'companion-memory: main panel',
         )
+
+        // 顶部栏「会话视图」标签：和 对话轨迹 并排。跟随当前对话，只读速览。
+        ctx.effect(() => {
+          try {
+            return ctx.slots.inject('conversation.view', () =>
+              ctx.slots.register(
+                {
+                  name: 'conversation.view',
+                  id: PLUGIN_ID,
+                  order: 40,
+                  label: () => '伴侣记忆',
+                },
+                CompanionConversationView,
+              ),
+            )
+          } catch (error) {
+            try { console.warn('[companion-memory] conversation view registration failed', error) } catch {}
+            return () => {}
+          }
+        }, 'companion-memory: conversation view')
       },
     }
   },
