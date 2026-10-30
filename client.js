@@ -91,6 +91,12 @@ window.__ModuleLoader__.load({
 .cm-fav-inline-head { grid-area: head; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cm-fav-name { font-weight: 600; font-size: 13px; }
 .cm-fav-value-sm { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .cm-fav-inline-values { display: inline-flex; align-items: baseline; gap: 8px; }
+  .cm-bond-badge { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); color: var(--cm-text-2, #64748b); font-variant-numeric: tabular-nums; }
+  .cm-bond-line { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .cm-bond-btn { width: 22px; height: 22px; line-height: 1; padding: 0; border-radius: 6px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.14)); background: var(--cm-surface, #fff); color: var(--cm-text-2, #475569); font-size: 12px; cursor: pointer; }
+  .cm-bond-btn:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+  .cm-history-bond { font-size: 11px; color: #b45309; font-variant-numeric: tabular-nums; }
 .cm-fav-row-inline .cm-slider { grid-area: slider; }
 .cm-fav-inline-foot { grid-area: foot; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .cm-input-small { height: 28px; font-size: 12px; }
@@ -99,7 +105,7 @@ window.__ModuleLoader__.load({
 .cm-fav-controls { flex: 1 1 auto; }
 .cm-slider { width: 100%; accent-color: var(--cm-brand, #2f6bff); }
 .cm-history { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; }
-.cm-history li { display: grid; grid-template-columns: auto 96px 1fr; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
+.cm-history li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.03)); }
 .cm-history-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .cm-memory-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .cm-evo-block { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--cm-border, rgba(15, 23, 42, 0.12)); }
@@ -634,6 +640,19 @@ window.__ModuleLoader__.load({
 
       const dirty = Number(draft) !== Number(speaker.favorability)
 
+      const adjustBond = useCallback(async (step) => {
+        setBusy(true)
+        try {
+          const result = await apiPost('/bond', { delta: step, reason: '用户在面板里手动调整羁绊', speaker: speaker.name })
+          notify(`羁绊 ${result.bondFrom} → ${result.bond}`)
+          await refresh()
+        } catch (error) {
+          notify(`羁绊更新失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [notify, refresh, speaker.name])
+
       return h(
         'div',
         { className: `cm-fav-row cm-fav-row-inline${speaker.isCurrent ? ' cm-fav-row-current' : ''}` },
@@ -641,7 +660,14 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-fav-inline-head' },
           h('span', { className: 'cm-fav-name' }, speaker.name + (speaker.isCurrent ? ' ·当前' : '')),
-          h('span', { className: `cm-fav-value-sm ${favourTone(speaker.favorability)}` }, signed(speaker.favorability)),
+          h(
+            'span',
+            { className: 'cm-fav-inline-values' },
+            h('span', { className: `cm-fav-value-sm ${favourTone(speaker.favorability)}` }, signed(speaker.favorability)),
+            h('span', { className: 'cm-bond-badge', title: '羁绊值：好感度满 ±100 后，AI 继续累积的部分（无上限）' }, `羁绊 ${signed(Number(speaker.bond) || 0)}`),
+            h('button', { className: 'cm-bond-btn', type: 'button', title: '手动给羁绊 +1', disabled: busy, onClick: () => void adjustBond(1) }, '+'),
+            h('button', { className: 'cm-bond-btn', type: 'button', title: '手动给羁绊 -1', disabled: busy, onClick: () => void adjustBond(-1) }, '−'),
+          ),
         ),
         h('input', {
           className: 'cm-slider',
@@ -769,12 +795,25 @@ window.__ModuleLoader__.load({
         }
       }, [notify, refresh])
 
+      const adjustBond = useCallback(async (step) => {
+        setBusy(true)
+        try {
+          const result = await apiPost('/bond', { delta: step, reason: '用户在面板里手动调整羁绊', speaker: currentSpeaker?.name })
+          notify(`羁绊 ${result.bondFrom} → ${result.bond}`)
+          await refresh()
+        } catch (error) {
+          notify(`羁绊更新失败：${error.message}`, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [notify, refresh, currentSpeaker])
+
       const history = snapshot.favorabilityHistory || []
 
       return h(
         'section',
         { className: 'cm-card' },
-        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '角色（AI）对每个人 · -100 ~ 100')),
+        h('div', { className: 'cm-card-head' }, h('h3', null, '好感度'), h('span', { className: 'cm-muted' }, '角色（AI）对每个人 · 好感度 -100 ~ 100 · 羁绊无上限')),
         // ── 每个说话人一条独立滑条（群里人人一条，拖谁就是改谁）──
         speakers.length > 1
           ? h(
@@ -807,6 +846,13 @@ window.__ModuleLoader__.load({
                   onChange: (event) => setDraft(Number(event.target.value)),
                 }),
                 h('div', { className: 'cm-muted' }, `目标值：${signed(draft)}（当前说话人：${currentName}）`),
+                h(
+                  'div',
+                  { className: 'cm-bond-line' },
+                  h('span', { className: 'cm-bond-badge', title: '羁绊值：好感度满 ±100 后，AI 继续累积的部分（无上限）' }, `羁绊 ${signed(Number(currentSpeaker?.bond) || 0)}（无上限）`),
+                  h('button', { className: 'cm-bond-btn', type: 'button', title: '手动给羁绊 +1', disabled: busy, onClick: () => void adjustBond(1) }, '+1'),
+                  h('button', { className: 'cm-bond-btn', type: 'button', title: '手动给羁绊 -1', disabled: busy, onClick: () => void adjustBond(-1) }, '−1'),
+                ),
               ),
             ),
         speakers.length > 1
@@ -847,6 +893,9 @@ window.__ModuleLoader__.load({
                   { key: `${change.at}-${index}` },
                   h('span', { className: 'cm-muted' }, formatStamp(change.at)),
                   h('span', { className: `cm-history-value ${favourTone(change.value)}` }, `${change.value}（${signed(change.value - change.from)}）`),
+                  change.bond !== undefined && change.bond !== null
+                    ? h('span', { className: 'cm-history-bond' }, `羁绊 ${signed(Number(change.bondFrom) || 0)} → ${signed(Number(change.bond) || 0)}`)
+                    : null,
                   h('span', null, change.speakerName && change.speakerName !== '用户' ? `${change.speakerName}：${change.reason}` : change.reason),
                 ),
               ),
@@ -1439,6 +1488,9 @@ window.__ModuleLoader__.load({
             conversationMessages: (parsed.conversation && parsed.conversation.counts && parsed.conversation.counts.total)
               ?? summary.conversationMessages
               ?? 0,
+            conversationChars: Array.isArray(parsed.conversation?.messages)
+              ? parsed.conversation.messages.reduce((sum, message) => sum + String(message?.text ?? '').length, 0)
+              : 0,
             bundle: parsed,
           })
           notify('已读取记忆文档，请确认下面的摘要后点击导入。')
@@ -1459,7 +1511,7 @@ window.__ModuleLoader__.load({
         setBusy('import')
         try {
           const result = await apiPost('/import', { bundle: imported.bundle, merge: overwrite ? false : true })
-          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条` : ''}`)
+          notify(`导入完成：文档 ${result.docsWritten} 份、知识库文件 ${result.filesWritten} 个${result.filesSkipped ? `（跳过 ${result.filesSkipped} 个已存在）` : ''}${result.conversationImported ? `、聊天原文 ${result.conversationImported} 条${result.conversationSkipped ? `（较早的 ${result.conversationSkipped} 条已跳过）` : ''}` : ''}`)
           setImported(null)
           if (props.onReload) await props.onReload()
         } catch (error) {
@@ -1520,7 +1572,7 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '活跃记忆'), h('dd', null, `${imported.activeMemories} 条`)),
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '知识库文件'), h('dd', null, `${imported.files} 个`)),
                   h('div', { className: 'cm-kv-row' }, h('dt', null, '人格文档'), h('dd', null, `${imported.docs} 份`)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条`)),
+                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条${imported.conversationChars ? `（约 ${Math.round(imported.conversationChars / 1000)}k 字）` : ''}`)),
                 ),
                 h('p', { className: 'cm-muted' }, '选一个导入方式：合并会保留当前已有内容，只补充缺的；覆盖会用这份文档替换当前对话的记忆。'),
                 h(
@@ -1549,7 +1601,8 @@ window.__ModuleLoader__.load({
         ['首次对话日', snapshot.firstInteractionDay || '—'],
         ['好感度（角色对当前说话人）', (() => {
           const current = (snapshot.speakers || []).find((item) => item.isCurrent) || null
-          return `${signed(snapshot.favorability)}（-100 ~ 100）${current && current.id !== 'default' ? `｜当前：${current.name}` : ''}`
+          const bondText = current && Number.isFinite(Number(current.bond)) ? `｜羁绊 ${signed(Number(current.bond))}（无上限）` : ''
+          return `${signed(snapshot.favorability)}（-100 ~ 100）${bondText}${current && current.id !== 'default' ? `｜当前：${current.name}` : ''}`
         })()],
         ['在场人物', (snapshot.speakers || []).length > 1
           ? snapshot.speakers.map((speaker) => `${speaker.name}(${signed(speaker.favorability)})${speaker.isCurrent ? '·当前' : ''}`).join(' / ')
