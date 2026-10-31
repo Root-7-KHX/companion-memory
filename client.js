@@ -29,6 +29,7 @@ window.__ModuleLoader__.load({
   --cm-border-strong: var(--dsw-alias-border-l2, rgba(15, 23, 42, 0.24));
   --cm-brand: var(--dsw-alias-brand-primary, #2f6bff);
   --cm-btn-bg: #2f5bea;
+  --cm-btn-hover-bg: #2853d6;
   --cm-btn-fg: #ffffff;
   --cm-danger: var(--dsw-alias-state-error-primary, #d92d20);
   --cm-success: var(--dsw-alias-state-success-primary, #067647);
@@ -80,11 +81,16 @@ window.__ModuleLoader__.load({
 .cm-input { height: 32px; }
 .cm-input-grow { flex: 1 1 auto; }
 .cm-input-narrow { flex: 0 0 120px; width: 120px; }
-.cm-btn { appearance: none; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); background: var(--cm-bg, #ffffff); color: var(--cm-text, #1f2328); font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
-.cm-btn:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.05)); }
-.cm-btn:disabled { opacity: 0.55; cursor: default; }
-.cm-btn-primary { background: var(--cm-btn-bg, #2f5bea); border-color: transparent; color: var(--cm-btn-fg, #ffffff); font-weight: 600; }
-.cm-btn-primary:hover { filter: brightness(1.06); }
+.cm-btn { appearance: none; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); background: var(--cm-bg, #ffffff); color: var(--cm-text, #1f2328); font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 7px; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, filter 120ms ease; }
+.cm-btn:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.05)); border-color: var(--cm-border-strong, rgba(15, 23, 42, 0.28)); }
+.cm-btn:active { filter: brightness(0.96); }
+.cm-btn:focus-visible { outline: 2px solid var(--cm-brand, #2f6bff); outline-offset: 1px; }
+.cm-btn:disabled, .cm-btn:disabled:hover { opacity: 0.55; cursor: default; }
+/* 主按钮在 hover 时保持蓝底白字：否则通用 .cm-btn:hover 的近白背景会盖掉蓝色，白字就「消失」了 */
+.cm-btn-primary { background: var(--cm-btn-bg, #2f5bea); border-color: var(--cm-btn-bg, #2f5bea); color: var(--cm-btn-fg, #ffffff); font-weight: 600; }
+.cm-btn-primary:hover { background: var(--cm-btn-hover-bg, #2853d6); border-color: var(--cm-btn-hover-bg, #2853d6); color: var(--cm-btn-fg, #ffffff); }
+.cm-btn-primary:active { filter: brightness(0.92); }
+.cm-btn-primary:disabled, .cm-btn-primary:disabled:hover { background: var(--cm-btn-bg, #2f5bea); border-color: var(--cm-btn-bg, #2f5bea); color: var(--cm-btn-fg, #ffffff); filter: none; }
 .cm-btn-small { padding: 3px 9px; font-size: 12px; }
 .cm-btn-ghost { background: transparent; }
 .cm-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
@@ -108,6 +114,20 @@ window.__ModuleLoader__.load({
 .cm-fav-row-inline .cm-slider { grid-area: slider; }
 .cm-fav-inline-foot { grid-area: foot; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .cm-input-small { height: 28px; font-size: 12px; }
+/* 配置页文档：每条设定一行（文字 + 权重 + 删除），新增条目一次可加多条 */
+.cm-doc-items { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.cm-doc-item { display: flex; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 8px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.025)); }
+.cm-doc-item-text { flex: 1 1 auto; width: auto; min-width: 0; height: 30px; box-sizing: border-box; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.16)); border-radius: 6px; background: var(--cm-bg, #ffffff); color: var(--cm-text, #1f2328); font: inherit; font-size: 12.5px; padding: 3px 8px; }
+.cm-doc-item-text:focus { outline: 2px solid var(--cm-brand, #2f6bff); outline-offset: -1px; }
+.cm-doc-item-weight { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--cm-text-2, #64748b); }
+.cm-doc-item-weight .cm-weight-input { width: 52px; }
+.cm-doc-item-del { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; line-height: 1; font-size: 12px; }
+.cm-doc-item-del:hover { color: var(--cm-danger, #d92d20); }
+.cm-doc-empty { margin: 0; font-size: 11.5px; color: var(--cm-text-2, #64748b); }
+.cm-doc-add { display: flex; align-items: flex-end; gap: 6px; margin-top: 2px; }
+.cm-doc-add-text { flex: 1 1 auto; width: auto; min-width: 0; }
+.cm-field .cm-doc-add-text { min-height: 44px; }
+.cm-doc-add-btn { flex: 0 0 auto; }
 /* 好感度卡片跟随页面一起滚动（不做任何固定，避免遮住下面的内容） */
 .cm-fav-value { font-size: 34px; font-weight: 700; min-width: 84px; font-variant-numeric: tabular-nums; color: var(--cm-text); }
 .cm-fav-controls { flex: 1 1 auto; }
@@ -410,50 +430,188 @@ window.__ModuleLoader__.load({
 
     // ── config tab ─────────────────────────────────────────────────────────
 
-    function pickFields(source) {
-      const out = {}
-      if (source && typeof source === 'object' && source.fields && typeof source.fields === 'object') {
-        for (const key of Object.keys(source.fields)) {
-          const value = source.fields[key]
-          out[key] = typeof value === 'string' ? value : ''
-        }
+    // ── 配置文档：条目（文字 + 权重）归一化 ───────────────────────────────
+    //
+    // 新契约把每个字段解析成 [{ text, weight }]；旧快照只有字符串时，这里在前端
+    // 按「；」「;」/换行拆成条目兜底，并识别条目尾部「〔90〕」形式的权重标记。
+
+    const DOC_ITEM_WEIGHT_DEFAULT = 50
+    const DOC_ITEM_WEIGHT_MIN = 1
+    const DOC_ITEM_WEIGHT_MAX = 100
+    const DOC_ITEM_SPLIT_RE = /[；;\n]+/
+    const DOC_ITEM_WEIGHT_MARK_RE = /\s*〔(\d{1,3})〕\s*$/
+
+    function clampDocItemWeight(value) {
+      const number = Math.round(Number(value))
+      if (!Number.isFinite(number)) return DOC_ITEM_WEIGHT_DEFAULT
+      return Math.min(DOC_ITEM_WEIGHT_MAX, Math.max(DOC_ITEM_WEIGHT_MIN, number))
+    }
+
+    function splitDocItemText(raw) {
+      return String(raw ?? '')
+        .split(DOC_ITEM_SPLIT_RE)
+        .map((part) => part.trim())
+        .filter((part) => part !== '')
+    }
+
+    /** 一条字符串可能以「〔90〕」结尾（AI 写进 markdown 的权重标记）；空文本返回 null。 */
+    function parseDocItemLine(raw) {
+      let text = String(raw ?? '').trim()
+      let weight = DOC_ITEM_WEIGHT_DEFAULT
+      const marked = DOC_ITEM_WEIGHT_MARK_RE.exec(text)
+      if (marked) {
+        weight = clampDocItemWeight(marked[1])
+        text = text.slice(0, marked.index).trim()
+      }
+      return text === '' ? null : { text, weight }
+    }
+
+    function splitDocFieldString(value) {
+      const out = []
+      for (const part of splitDocItemText(value)) {
+        const item = parseDocItemLine(part)
+        if (item) out.push(item)
       }
       return out
     }
 
+    function normalizeDocItemList(list) {
+      const out = []
+      if (!Array.isArray(list)) return out
+      for (const entry of list) {
+        if (entry && typeof entry === 'object') {
+          const text = String(entry.text ?? '').trim()
+          if (text !== '') out.push({ text, weight: clampDocItemWeight(entry.weight) })
+          continue
+        }
+        // 服务器也兼容字符串（旧数据/手写 state）：按分隔符拆开再逐条解析。
+        if (typeof entry === 'string') out.push(...splitDocFieldString(entry))
+      }
+      return out
+    }
+
+    /**
+     * 取某份文档各字段的条目：
+     * 1. snapshot.docItems[docKey].fields 存在 → 直接用（后端新契约）；
+     * 2. 否则退回旧 snapshot.docFields 的字符串，在前端拆分兜底。
+     */
+    function buildDocItemFields(serverItems, serverFields, fieldsDef) {
+      const out = {}
+      const itemFields = serverItems && typeof serverItems === 'object' && serverItems.fields && typeof serverItems.fields === 'object'
+        ? serverItems.fields
+        : null
+      const stringFields = {}
+      if (serverFields && typeof serverFields === 'object' && serverFields.fields && typeof serverFields.fields === 'object') {
+        for (const key of Object.keys(serverFields.fields)) {
+          const value = serverFields.fields[key]
+          stringFields[key] = typeof value === 'string' ? value : ''
+        }
+      }
+      for (const field of fieldsDef) {
+        if (itemFields) out[field.key] = normalizeDocItemList(itemFields[field.key])
+        else out[field.key] = splitDocFieldString(stringFields[field.key])
+      }
+      return out
+    }
+
+    /** 「其他补充」：新契约在 docItems[docKey].extra，旧快照仍在 docFields[docKey].extra。 */
+    function docItemExtra(serverItems, serverFields) {
+      if (serverItems && typeof serverItems === 'object' && typeof serverItems.extra === 'string') return serverItems.extra
+      if (serverFields && typeof serverFields === 'object' && typeof serverFields.extra === 'string') return serverFields.extra
+      return ''
+    }
+
+    /** 保存前归一化：trim、丢掉空条目、权重夹到 1~100；顺序保持界面顺序。 */
+    function serializeDocItemFields(items) {
+      const out = {}
+      for (const key of Object.keys(items || {})) {
+        const list = Array.isArray(items[key]) ? items[key] : []
+        const next = []
+        for (const item of list) {
+          if (!item || typeof item !== 'object') continue
+          const text = String(item.text ?? '').trim()
+          if (text === '') continue
+          next.push({ text, weight: clampDocItemWeight(item.weight) })
+        }
+        out[key] = next
+      }
+      return out
+    }
+
+    /** 条目权重输入框（1~100，默认 50）：不逐键保存，回车/失焦时 clamp 并提交。 */
+    function DocItemWeightInput(props) {
+      const { value, onCommit } = props
+      const [draft, setDraft] = useState(String(value))
+      const editingRef = useRef(false)
+
+      useEffect(() => {
+        if (!editingRef.current) setDraft(String(value))
+      }, [value])
+
+      const commit = () => {
+        editingRef.current = false
+        const raw = String(draft).trim()
+        const next = raw === '' ? DOC_ITEM_WEIGHT_DEFAULT : clampDocItemWeight(raw)
+        setDraft(String(next))
+        if (next !== clampDocItemWeight(value)) onCommit(next)
+      }
+
+      return h('input', {
+        className: 'cm-weight-input',
+        type: 'number',
+        min: DOC_ITEM_WEIGHT_MIN,
+        max: DOC_ITEM_WEIGHT_MAX,
+        step: 1,
+        value: draft,
+        title: '权重 1~100：越大越重要、越优先（默认 50）',
+        onChange: (event) => {
+          editingRef.current = true
+          setDraft(event.target.value)
+        },
+        onBlur: commit,
+        onKeyDown: (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        },
+      })
+    }
+
     function StructuredDoc(props) {
-      const { docKey, title, schema, serverFields } = props
+      const { docKey, title, schema, serverItems, serverFields } = props
       const fieldsDef = schema && Array.isArray(schema.fields) ? schema.fields : []
       const intro = schema && Array.isArray(schema.intro) ? schema.intro : []
-      const isSections = Boolean(schema && schema.layout === 'sections')
-      const initialFields = pickFields(serverFields)
-      const initialExtra = serverFields && typeof serverFields.extra === 'string' ? serverFields.extra : ''
-      const [values, setValues] = useState(initialFields)
+      const initialItems = buildDocItemFields(serverItems, serverFields, fieldsDef)
+      const initialExtra = docItemExtra(serverItems, serverFields)
+      const [items, setItems] = useState(initialItems)
       const [extra, setExtra] = useState(initialExtra)
+      // 每个字段「待添加」的草稿：{ [fieldKey]: string }，用户可一次贴多条。
+      const [drafts, setDrafts] = useState({})
       const [dirty, setDirty] = useState(false)
       const [status, setStatus] = useState('已保存')
-      const valuesRef = useRef(initialFields)
+      const itemsRef = useRef(initialItems)
       const extraRef = useRef(initialExtra)
-      const savedRef = useRef({ fields: initialFields, extra: initialExtra })
+      const savedRef = useRef({ fields: serializeDocItemFields(initialItems), extra: initialExtra })
       const editedRef = useRef(false)
       const timerRef = useRef(null)
 
       useEffect(() => {
         if (editedRef.current) return
         const incoming = {
-          fields: pickFields(serverFields),
-          extra: serverFields && typeof serverFields.extra === 'string' ? serverFields.extra : '',
+          fields: serializeDocItemFields(buildDocItemFields(serverItems, serverFields, fieldsDef)),
+          extra: docItemExtra(serverItems, serverFields),
         }
         if (JSON.stringify(incoming) !== JSON.stringify(savedRef.current)) {
           savedRef.current = incoming
-          valuesRef.current = incoming.fields
+          itemsRef.current = incoming.fields
           extraRef.current = incoming.extra
-          setValues(incoming.fields)
+          setItems(incoming.fields)
           setExtra(incoming.extra)
           setDirty(false)
           setStatus('已同步磁盘内容')
         }
-      }, [serverFields])
+      }, [serverItems, serverFields])
 
       useEffect(
         () => () => {
@@ -463,7 +621,7 @@ window.__ModuleLoader__.load({
       )
 
       const save = useCallback(async () => {
-        const fields = valuesRef.current
+        const fields = serializeDocItemFields(itemsRef.current)
         const extraValue = extraRef.current
         if (JSON.stringify({ fields, extra: extraValue }) === JSON.stringify(savedRef.current)) {
           editedRef.current = false
@@ -494,14 +652,61 @@ window.__ModuleLoader__.load({
         }, 600)
       }, [save])
 
-      const onFieldChange = useCallback(
-        (key, value) => {
-          const next = { ...valuesRef.current, [key]: value }
-          valuesRef.current = next
-          setValues(next)
+      const replaceFieldItems = useCallback(
+        (fieldKey, nextList) => {
+          const next = { ...itemsRef.current, [fieldKey]: nextList }
+          itemsRef.current = next
+          setItems(next)
           scheduleSave()
         },
         [scheduleSave],
+      )
+
+      const changeItemText = useCallback(
+        (fieldKey, index, text) => {
+          const current = Array.isArray(itemsRef.current[fieldKey]) ? itemsRef.current[fieldKey] : []
+          replaceFieldItems(fieldKey, current.map((item, itemIndex) => (itemIndex === index ? { ...item, text } : item)))
+        },
+        [replaceFieldItems],
+      )
+
+      const changeItemWeight = useCallback(
+        (fieldKey, index, weight) => {
+          const current = Array.isArray(itemsRef.current[fieldKey]) ? itemsRef.current[fieldKey] : []
+          replaceFieldItems(fieldKey, current.map((item, itemIndex) => (itemIndex === index ? { ...item, weight: clampDocItemWeight(weight) } : item)))
+        },
+        [replaceFieldItems],
+      )
+
+      const removeItem = useCallback(
+        (fieldKey, index) => {
+          const current = Array.isArray(itemsRef.current[fieldKey]) ? itemsRef.current[fieldKey] : []
+          replaceFieldItems(fieldKey, current.filter((item, itemIndex) => itemIndex !== index))
+        },
+        [replaceFieldItems],
+      )
+
+      const setDraft = useCallback((fieldKey, value) => {
+        setDrafts((previous) => ({ ...previous, [fieldKey]: value }))
+      }, [])
+
+      const addItems = useCallback(
+        (fieldKey) => {
+          const candidates = splitDocItemText(drafts[fieldKey] ?? '')
+          if (candidates.length === 0) return
+          setDraft(fieldKey, '')
+          const current = Array.isArray(itemsRef.current[fieldKey]) ? itemsRef.current[fieldKey] : []
+          const existing = new Set(current.map((item) => String(item.text ?? '').trim()))
+          const added = []
+          for (const candidate of candidates) {
+            if (existing.has(candidate)) continue
+            existing.add(candidate)
+            added.push({ text: candidate, weight: DOC_ITEM_WEIGHT_DEFAULT })
+          }
+          if (added.length === 0) return
+          replaceFieldItems(fieldKey, current.concat(added))
+        },
+        [drafts, replaceFieldItems, setDraft],
       )
 
       const onExtraChange = useCallback(
@@ -540,23 +745,76 @@ window.__ModuleLoader__.load({
               intro.map((line, index) => h('p', { key: index }, line)),
             )
           : null,
-        h('p', { className: 'cm-lock' }, '以上说明文字为固定内容，不可删改；下面每个框单独填写，留空表示未设置。'),
-        fieldsDef.map((field) =>
-          h(
+        h('p', { className: 'cm-lock' }, '以上说明文字为固定内容，不可删改；下面每个字段由一条条独立设定组成，每条都能单独改文字、改 1~100 的权重或删除。'),
+        fieldsDef.map((field) => {
+          const fieldItems = Array.isArray(items[field.key]) ? items[field.key] : []
+          return h(
             'div',
             { className: 'cm-field', key: field.key },
-            h('label', { htmlFor: `cm-${docKey}-${field.key}` }, field.label),
-            h('textarea', {
-              id: `cm-${docKey}-${field.key}`,
-              className: 'cm-textarea',
-              rows: isSections ? 3 : 2,
-              spellCheck: false,
-              placeholder: field.placeholder || '',
-              value: typeof values[field.key] === 'string' ? values[field.key] : '',
-              onChange: (event) => onFieldChange(field.key, event.target.value),
-            }),
-          ),
-        ),
+            h('label', { htmlFor: `cm-${docKey}-${field.key}-add` }, field.label),
+            fieldItems.length === 0
+              ? h('p', { className: 'cm-doc-empty' }, '还没有条目，下面加一条。')
+              : h(
+                  'div',
+                  { className: 'cm-doc-items' },
+                  fieldItems.map((item, index) =>
+                    h(
+                      'div',
+                      { className: 'cm-doc-item', key: `${field.key}-${index}` },
+                      h('input', {
+                        className: 'cm-doc-item-text',
+                        type: 'text',
+                        spellCheck: false,
+                        placeholder: '这一条设定',
+                        title: '这条设定（改完自动保存）',
+                        value: typeof item.text === 'string' ? item.text : '',
+                        onChange: (event) => changeItemText(field.key, index, event.target.value),
+                      }),
+                      h(
+                        'span',
+                        { className: 'cm-doc-item-weight', title: '权重 1~100：越大越重要、越优先（默认 50）' },
+                        '权重',
+                        h(DocItemWeightInput, {
+                          value: item.weight,
+                          onCommit: (weight) => changeItemWeight(field.key, index, weight),
+                        }),
+                      ),
+                      h(
+                        'button',
+                        {
+                          className: 'cm-btn cm-btn-small cm-btn-ghost cm-doc-item-del',
+                          type: 'button',
+                          title: '删除这一条',
+                          'aria-label': '删除这一条',
+                          onClick: () => removeItem(field.key, index),
+                        },
+                        '✕',
+                      ),
+                    ),
+                  ),
+                ),
+            h(
+              'div',
+              { className: 'cm-doc-add' },
+              h('textarea', {
+                id: `cm-${docKey}-${field.key}-add`,
+                className: 'cm-textarea cm-doc-add-text',
+                rows: 2,
+                spellCheck: false,
+                placeholder: field.placeholder
+                  ? `${field.placeholder}（一次加多条用「；」隔开）`
+                  : '一条设定一条；一次加多条用「；」「;」或换行隔开',
+                value: typeof drafts[field.key] === 'string' ? drafts[field.key] : '',
+                onChange: (event) => setDraft(field.key, event.target.value),
+              }),
+              h(
+                'button',
+                { className: 'cm-btn cm-btn-small cm-doc-add-btn', type: 'button', onClick: () => addItems(field.key) },
+                '添加',
+              ),
+            ),
+          )
+        }),
         h(
           'div',
           { className: 'cm-extra' },
@@ -866,6 +1124,7 @@ window.__ModuleLoader__.load({
       if (!snapshot) return h('div', { className: 'cm-empty' }, '加载中…')
       const schemaAll = snapshot.docSchema || {}
       const fieldsAll = snapshot.docFields || {}
+      const itemsAll = snapshot.docItems || {}
       const aiEdit = snapshot.aiEditDocs || {}
       const editableNames = [aiEdit.personality ? '角色性格' : null, aiEdit.examples ? '预设发言例句' : null, aiEdit.rules ? '允许&禁止行为' : null].filter(Boolean)
       const aiLine = editableDocsLine(aiEdit, editableNames)
@@ -881,7 +1140,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'cm-intro' },
-          '这三份文档是角色的核心设定：AI 每次对话前都会重新读取，保存后下一轮立刻生效。说明文字固定不可改，逐项填写即可；角色在长期相处中自己长出来的细节也会记在「记忆 → AI 自我演化」里。',
+          '这三份文档是角色的核心设定：AI 每次对话前都会重新读取，保存后下一轮立刻生效。说明文字固定不可改；下面每个字段都由一条条独立设定组成，每条可以单独给权重（1~100，默认 50，越大越重要、越优先）。想一次加多条，就在「添加条目」框里用「；」隔开（英文分号 ; 和换行也可以），会自动拆成单独条目。角色在长期相处中自己长出来的细节记在「记忆 → AI 自我演化」里。另外「好感度 + 羁绊」的累计变化量每满 50 点，会强制 AI 总结这段对话、小改一次这两份配置文档并更新自我演化条目（进度和手动清零在「记忆 → AI 自我演化」顶部）。',
         ),
         h('div', { className: 'cm-intro' }, aiLine),
         DOC_DEFS.map((definition) =>
@@ -890,6 +1149,7 @@ window.__ModuleLoader__.load({
             docKey: definition.key,
             title: definition.title,
             schema: schemaAll[definition.key] || null,
+            serverItems: itemsAll[definition.key] || null,
             serverFields: fieldsAll[definition.key] || null,
           }),
         ),
@@ -902,7 +1162,7 @@ window.__ModuleLoader__.load({
         return 'AI 目前不能修改这三份文档，只有你能改；想放开就在 profile 补丁里设置 companion-memory.config.aiEditDocs。'
       }
       const rulesText = aiEdit.rules ? '「允许&禁止行为」也只能在安全底线内小步调整。' : '「允许&禁止行为」只有你能改。'
-      return `AI 可以在剧情需要或你明确要求时小步修改：${editableNames.join('、')}（每次必须写原因，改动会自动归档到知识库，你随时可以在这里改回来；你手动的修改永远优先）。${rulesText}`
+      return `AI 可以在剧情需要或你明确要求时小步修改：${editableNames.join('、')}（每次必须写原因，改动会自动归档到知识库，你随时可以在这里改回来；AI 改文档时也会按规则给每条配权重，你手动的修改永远优先）。${rulesText}`
     }
 
     // ── memory tab ─────────────────────────────────────────────────────────
@@ -1238,10 +1498,12 @@ window.__ModuleLoader__.load({
                   { key: `${change.at}-${index}` },
                   h('span', { className: 'cm-muted' }, formatStamp(change.at)),
                   h('span', { className: `cm-history-value ${favourTone(change.value)}` }, `${change.value}（${signed(change.value - change.from)}）`),
-                  change.stepClamped
-                    ? h('span', { className: 'cm-muted', title: '好感度是循序渐进的：单轮降幅超过上限时按上限结算' }, `目标值 ${change.requested}（单轮最多降 ${change.stepLimit}，按 ${change.clampedTo} 结算）`)
-                    : null,
-                  change.absorbed
+                  change.misreport
+                    ? h('span', { className: 'cm-muted', title: '跌幅远大于单轮上限、本轮又没有大情绪波动：判定为 AI 把「+N」误写成绝对值的误报，只按小幅结算' }, `目标值 ${change.requested}（疑似误报：跌幅 ${change.misreportRawDrop}，按 ${signed(-(Number(change.misreportDrop) || 0))} 结算${change.absorbed ? `，羁绊抵消 ${change.absorbed}` : ''}）`)
+                    : change.stepClamped
+                      ? h('span', { className: 'cm-muted', title: '好感度是循序渐进的：单轮降幅超过上限时按上限结算' }, `目标值 ${change.requested}（单轮最多降 ${change.stepLimit}，按 ${change.clampedTo} 结算）`)
+                      : null,
+                  change.absorbed && !change.misreport
                     ? h('span', { className: 'cm-muted', title: 'AI 这次给出的目标值被「先扣羁绊」规则吸收了' }, `目标值 ${change.requested ?? Number(change.value) - Number(change.absorbed)}｜羁绊抵消 ${change.absorbed}`)
                     : null,
                   change.bond !== undefined && change.bond !== null
@@ -1367,6 +1629,23 @@ window.__ModuleLoader__.load({
       const order = Array.isArray(evolution.order) ? evolution.order : []
       const [drafts, setDrafts] = useState({})
       const [busyKey, setBusyKey] = useState('')
+      const [triggerBusy, setTriggerBusy] = useState(false)
+
+      const resetTrigger = useCallback(
+        async () => {
+          setTriggerBusy(true)
+          try {
+            await apiPost('/evolution/trigger', { reset: true })
+            notify('人格演化进度已清零')
+            await refresh()
+          } catch (error) {
+            notify(`清零失败：${error.message}`, true)
+          } finally {
+            setTriggerBusy(false)
+          }
+        },
+        [notify, refresh],
+      )
 
       const addEntry = useCallback(
         async (sectionKey) => {
@@ -1423,6 +1702,10 @@ window.__ModuleLoader__.load({
         [notify, refresh],
       )
 
+      const trigger = evolution.trigger || { step: 50, progress: 0, due: 0, doneCount: 0, lastDoneAt: null }
+      const triggerStep = Number(trigger.step) || 50
+      const triggerProgress = Math.max(0, Math.min(triggerStep, Number(trigger.progress) || 0))
+
       return h(
         'section',
         { className: 'cm-card' },
@@ -1431,6 +1714,29 @@ window.__ModuleLoader__.load({
           { className: 'cm-card-head' },
           h('h3', null, 'AI 自我演化'),
           h('span', { className: 'cm-muted' }, `共 ${evolution.total} 条 · 每区上限 ${evolution.limit}`),
+        ),
+        h(
+          'div',
+          { className: 'cm-hint cm-hint-tight' },
+          h(
+            'div',
+            null,
+            `人格演化：进度 ${triggerProgress}/${triggerStep}${trigger.due > 0 ? '（强制演化待完成）' : ''}${trigger.doneCount > 0 ? `｜已完成 ${trigger.doneCount} 次` : ''}${trigger.lastDoneAt ? `｜上次完成 ${String(trigger.lastDoneAt).slice(0, 10)}` : ''}`,
+          ),
+          h(
+            'div',
+            null,
+            `好感度 + 羁绊的累计变化量每满 ${triggerStep} 点，强制 AI 总结这段对话、小改一次配置文档（「配置」页里的角色性格/例句）并更新下面的自我演化条目；完成（turn_end 确认）后计数清零、重新开始计。`,
+          ),
+          h(
+            'div',
+            { className: 'cm-bond-line' },
+            h(
+              'button',
+              { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: triggerBusy, onClick: () => void resetTrigger() },
+              '清零进度',
+            ),
+          ),
         ),
         h(
           'p',
@@ -1739,7 +2045,8 @@ window.__ModuleLoader__.load({
       const [hierarchy, setHierarchy] = useState(null)
       const [hierarchyBusy, setHierarchyBusy] = useState('')
       const packInput = useRef(null)
-      const autoPack = (props.snapshot && props.snapshot.autoPack) || { every: 0, turnsSince: 0, totalTurns: 0, count: 0, lastPackAt: null }
+      const tokenPackInput = useRef(null)
+      const autoPack = (props.snapshot && props.snapshot.autoPack) || { every: 0, everyTokens: 0, everyTokensCustom: false, turnsSince: 0, tokensSince: 0, totalTurns: 0, count: 0, lastPackAt: null }
 
       useEffect(() => {
         if (props.snapshot && props.snapshot.knowledge) setFiles(props.snapshot.knowledge)
@@ -1749,6 +2056,11 @@ window.__ModuleLoader__.load({
         const input = packInput.current
         if (input && document.activeElement !== input) input.value = String(autoPack.every)
       }, [autoPack.every])
+
+      useEffect(() => {
+        const input = tokenPackInput.current
+        if (input && document.activeElement !== input) input.value = String(autoPack.everyTokens || 0)
+      }, [autoPack.everyTokens])
 
       const saveAutoPack = useCallback(async () => {
         const raw = Number(packInput.current ? packInput.current.value : autoPack.every)
@@ -1763,6 +2075,29 @@ window.__ModuleLoader__.load({
           notify(`保存失败：${error.message}`, true)
         }
       }, [autoPack.every, notify])
+
+      const saveAutoPackTokens = useCallback(async () => {
+        const raw = Number(tokenPackInput.current ? tokenPackInput.current.value : autoPack.everyTokens)
+        if (!Number.isInteger(raw) || raw < 0 || raw > 10000000) {
+          notify('请输入 0 ~ 10000000 之间的整数（0 表示关闭）', true)
+          return
+        }
+        try {
+          const value = await apiPost('/auto-pack', { everyTokens: raw })
+          notify(value.everyTokens > 0 ? `已保存：每约 ${value.everyTokens} tokens 自动打包一次` : '已关闭 token 自动打包')
+        } catch (error) {
+          notify(`保存失败：${error.message}`, true)
+        }
+      }, [autoPack.everyTokens, notify])
+
+      const followAutoPackTokens = useCallback(async () => {
+        try {
+          const value = await apiPost('/auto-pack', { everyTokens: null })
+          notify(`已改为跟随上下文压缩阈值：每约 ${value.everyTokens} tokens 打包一次`)
+        } catch (error) {
+          notify(`保存失败：${error.message}`, true)
+        }
+      }, [notify])
 
       const search = useCallback(async () => {
         if (query.trim() === '') {
@@ -1871,11 +2206,20 @@ window.__ModuleLoader__.load({
         h(
           'section',
           { className: 'cm-card' },
-          h('div', { className: 'cm-card-head' }, h('h3', null, '自动打包'), h('span', { className: 'cm-muted' }, autoPack.every > 0 ? `每 ${autoPack.every} 轮一次` : '已关闭')),
+          h(
+            'div',
+            { className: 'cm-card-head' },
+            h('h3', null, '自动打包'),
+            h(
+              'span',
+              { className: 'cm-muted' },
+              [autoPack.every > 0 ? `每 ${autoPack.every} 轮` : '', autoPack.everyTokens > 0 ? `每约 ${autoPack.everyTokens} tokens` : ''].filter(Boolean).join(' 或 ') || '已关闭',
+            ),
+          ),
           h(
             'p',
             { className: 'cm-hint' },
-            '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮），系统自动把这段时间的重点原文、次要摘要、48 小时（聊天时间）归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。填 0 表示关闭。',
+            '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮）或每累计约 N tokens（按你俩消息估算），系统自动把这段时间的重点原文、次要摘要、48 小时（聊天时间）归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。tokens 默认跟随「上下文压缩」的触发阈值；填具体数字 = 自定义，填 0 = 关闭 tokens 触发。',
           ),
           h(
             'div',
@@ -1890,8 +2234,30 @@ window.__ModuleLoader__.load({
               defaultValue: String(autoPack.every),
               'aria-label': '每多少轮对话自动打包一次',
             }),
-            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: saveAutoPack }, '保存'),
+            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: saveAutoPack }, '保存轮数'),
             h('span', { className: 'cm-muted' }, autoPack.every > 0 ? `当前区间 ${autoPack.turnsSince}/${autoPack.every} 轮，已打包 ${autoPack.count} 次${autoPack.lastPackAt ? `；上次 ${formatStamp(autoPack.lastPackAt)}` : ''}` : `已累计 ${autoPack.totalTurns} 轮对话`),
+          ),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('input', {
+              ref: tokenPackInput,
+              className: 'cm-input cm-input-narrow',
+              type: 'number',
+              min: 0,
+              max: 10000000,
+              step: 1000,
+              defaultValue: String(autoPack.everyTokens || 0),
+              'aria-label': '每多少 tokens 自动打包一次',
+            }),
+            h('button', { className: 'cm-btn', type: 'button', onClick: saveAutoPackTokens }, '保存 tokens'),
+            h('button', { className: 'cm-btn', type: 'button', onClick: followAutoPackTokens }, '跟随压缩阈值'),
+            h(
+              'span',
+              { className: 'cm-muted' },
+              (autoPack.everyTokensCustom === false ? '（跟随上下文压缩阈值）' : '') +
+                (autoPack.everyTokens > 0 ? `当前区间约 ${autoPack.tokensSince}/${autoPack.everyTokens} tokens` : `token 触发已关闭，当前区间约 ${autoPack.tokensSince} tokens`),
+            ),
           ),
         ),
         h(
@@ -2307,7 +2673,7 @@ window.__ModuleLoader__.load({
         ['活跃记忆', `${snapshot.memories.activeCount} 条（上限 ${snapshot.memories.limit} 个交互日自动归档）`],
         ['已归档记忆', `${snapshot.memories.archivedCount} 条`],
         ['知识库归档', `${snapshot.knowledge.archive.length} 天记录 · ${snapshot.knowledge.monthly.length} 份月度包 · ${(snapshot.knowledge.packs || []).length} 份打包/压缩文档`],
-        ['自动打包', snapshot.autoPack && snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮一次（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince}/${snapshot.autoPack.every} 轮，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在知识库页设置）'],
+        ['自动打包', snapshot.autoPack && (snapshot.autoPack.every > 0 || snapshot.autoPack.everyTokens > 0) ? `${[snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮` : '', snapshot.autoPack.everyTokens > 0 ? (snapshot.autoPack.everyTokensCustom === false ? `每约 ${snapshot.autoPack.everyTokens} tokens（跟随压缩阈值）` : `每约 ${snapshot.autoPack.everyTokens} tokens`) : ''].filter(Boolean).join(' 或 ')}（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince} 轮 / 约 ${snapshot.autoPack.tokensSince} tokens，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在知识库页设置）'],
         ['上下文压缩', snapshot.contextCompression && snapshot.contextCompression.count > 0 ? `已压缩 ${snapshot.contextCompression.count} 次（累计节省约 ${snapshot.contextCompression.shadowedTokens} tokens）${snapshot.contextCompression.lastAt ? `｜最近 ${formatStamp(snapshot.contextCompression.lastAt)}` : ''}` : '尚未触发（上下文接近模型窗口上限时，较早的对话会自动压缩成记忆块）'],
         ['最近两个聊天日上下文', snapshot.recent ? `${snapshot.recent.count} 条（用户 ${snapshot.recent.userCount} / 角色 ${snapshot.recent.assistantCount}）${snapshot.recent.newestAt ? `｜最新 ${formatStamp(snapshot.recent.newestAt)}` : ''}` : '—'],
         ['记录统计', `记录轮次 ${snapshot.stats.turnsRecorded} · 48h(聊天时间)归纳 ${snapshot.stats.summaries} · 月度打包 ${snapshot.stats.monthlyPackages}`],
@@ -2840,7 +3206,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'cm-title-row' },
-            h('div', null, h('h1', { className: 'cm-title' }, '伴侣记忆'), h('p', { className: 'cm-sub' }, '每个对话独立：配置 · 好感度 · 记忆 · 知识库')),
+            h('div', null, h('h1', { className: 'cm-title' }, 'AI记忆'), h('p', { className: 'cm-sub' }, '每个对话独立：配置 · 好感度 · 记忆 · 知识库')),
             h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: refresh }, '刷新'),
           ),
           enabled && snapshot ? h(StatusBar, { snapshot }) : null,
@@ -3013,7 +3379,7 @@ window.__ModuleLoader__.load({
                   name: 'sidebar.panellist',
                   id: PLUGIN_ID,
                   order: 30,
-                  label: () => '伴侣记忆',
+                  label: () => 'AI记忆',
                 },
                 CompanionSidebarIcon,
               ),
@@ -3044,7 +3410,7 @@ window.__ModuleLoader__.load({
                   name: 'conversation.view',
                   id: PLUGIN_ID,
                   order: 40,
-                  label: () => '伴侣记忆',
+                  label: () => 'AI记忆',
                 },
                 CompanionConversationView,
               ),
