@@ -22,7 +22,7 @@ import { registerContextCompression } from './lib/context-compress.js'
 import { registerHierarchy } from './lib/hierarchy.js'
 import { registerDynamicContext } from './lib/dynamic-context.js'
 import { registerLeanTools } from './lib/lean-tools.js'
-import { registerWebApi } from './lib/api.js'
+import { installBridgeEndpoint, registerWebApi } from './lib/api.js'
 
 // `webServer` must be a hard dependency: the panel's `/companion/api/*` routes
 // are registered exactly once in `apply`, so a plugin instance that starts
@@ -40,6 +40,14 @@ export function apply(ctx, config) {
   ctx.effect(() => registerContextCompression(ctx, manager, config ?? {}), 'companion-memory: conversation context compression')
   ctx.effect(() => registerHierarchy(ctx, manager), 'companion-memory: hierarchy memory compression')
   ctx.effect(() => registerWebApi(ctx, manager), 'companion-memory: /companion/api routes')
+  ctx.effect(() => installBridgeEndpoint(ctx, manager), 'companion-memory: bridge endpoint file')
+  // 自带的 QQ 连接：插件卸载时断开（不会自动连，防止和正在运行的 dsh-qqbot 抢同一个 bot）
+  ctx.effect(() => () => { try { manager.qq().stop() } catch { /* ignore */ } }, 'companion-memory: qq bot cleanup')
+  ctx.effect(() => {
+    const bridge = manager.bridge()
+    bridge.start()
+    return () => bridge.stop()
+  }, 'companion-memory: qq bridge')
 
   return () => {
     for (const sessionId of manager.enabledSessions()) {

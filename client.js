@@ -12,6 +12,22 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const { createElement: h, useCallback, useEffect, useMemo, useRef, useState } = React
 
+    /** 通用可折叠卡片：标题栏点击展开/收起（默认收起）。 */
+    function CollapsibleCard(props) {
+      const { title, badge, defaultOpen = false, children } = props
+      const [open, setOpen] = useState(defaultOpen)
+      return h(
+        'section',
+        { className: 'cm-card' },
+        h(
+          'button',
+          { className: 'cm-collapse', type: 'button', onClick: () => setOpen((value) => !value) },
+          (open ? '▾ ' : '▸ ') + title + (badge ? '（' + badge + '）' : ''),
+        ),
+        open ? h('div', null, children) : null,
+      )
+    }
+
     const PLUGIN_ID = 'companion-memory'
     const API_BASE = '/companion/api'
     const POLL_MS = 5000
@@ -52,6 +68,91 @@ window.__ModuleLoader__.load({
 .cm-tab-active { color: var(--cm-text, #1f2328); border-bottom-color: var(--cm-brand, #2f6bff); font-weight: 600; }
 .cm-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px 40px; }
 .cm-tab-body { display: flex; flex-direction: column; gap: 14px; }
+
+.cm-int-toolbar { display: flex; align-items: center; gap: 8px; }
+.cm-person-list { display: flex; flex-direction: column; gap: 10px; }
+.cm-person-card { background: var(--cm-surface-2, rgba(15, 23, 42, 0.02)); }
+.cm-person-memories { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.cm-person-memory { font-size: 12.5px; line-height: 1.55; color: var(--cm-text, #1f2328); }
+.cm-person-memory-text { display: block; }
+.cm-person-memory .cm-memory-meta { display: inline-flex; gap: 8px; margin-top: 1px; }
+.cm-int-topline { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: -2px 0 -4px; }
+.cm-int-topline-hint { font-size: 12px; line-height: 18px; color: var(--cm-text-2, #8b93a1); }
+.cm-int-submit { font-size: 12px; line-height: 18px; color: var(--cm-text-2, #8b93a1); text-decoration: none; white-space: nowrap; }
+.cm-int-submit:hover { color: var(--cm-brand, #4f6ef7); text-decoration: underline; }
+.cm-search-field { position: relative; flex: 1 1 auto; display: flex; align-items: center; }
+.cm-search-icon { position: absolute; left: 10px; font-size: 12px; color: var(--cm-text-2, #64748b); pointer-events: none; }
+.cm-search-input { width: 100%; box-sizing: border-box; height: 34px; padding: 0 30px 0 30px; border-radius: 8px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.12)); background: var(--cm-bg, #ffffff); color: var(--cm-text, #1f2328); font: inherit; font-size: 13px; outline: none; }
+.cm-search-input::placeholder { color: var(--cm-text-2, #94a3b8); }
+.cm-search-input:focus { border-color: var(--cm-brand, #2f5bea); box-shadow: 0 0 0 3px rgba(47, 91, 234, 0.14); }
+.cm-search-clear { position: absolute; right: 6px; border: 0; background: transparent; color: var(--cm-text-2, #64748b); cursor: pointer; font-size: 15px; line-height: 1; padding: 3px 6px; border-radius: 6px; }
+.cm-search-clear:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); color: var(--cm-text, #1f2328); }
+.cm-int-meta { margin: 0; font-size: 12px; color: var(--cm-text-2, #64748b); }
+.cm-app { display: flex; flex-direction: column; gap: 12px; }
+.cm-qq-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+.cm-qq-peers { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 2px; }
+.cm-qq-peer { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--cm-text, #1f2328); }
+
+.cm-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12.5px; color: var(--cm-text, #1f2328); user-select: none; }
+.cm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.cm-switch-slider { width: 40px; height: 22px; border-radius: 999px; background: rgba(15, 23, 42, 0.28); position: relative; transition: background 0.18s ease; flex: 0 0 auto; }
+.cm-switch-slider::after { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.18s ease; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+.cm-switch input:checked + .cm-switch-slider { background: #3b82f6; }
+.cm-switch input:checked + .cm-switch-slider::after { transform: translateX(18px); }
+.cm-qq-picker { position: relative; display: flex; flex-direction: column; gap: 6px; flex: 1 1 260px; min-width: 220px; }
+.cm-qq-picker-btn { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-qq-picker-panel { position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px); max-height: 340px; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.18)); border-radius: 10px; background: var(--cm-bg, #ffffff); box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22); }
+.cm-qq-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 4px 6px; font-size: 12px; }
+.cm-qq-folder { display: flex; flex-direction: column; gap: 2px; }
+.cm-qq-folder-head { border: 0; background: transparent; text-align: left; font: inherit; font-size: 12.5px; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--cm-text, #1f2328); }
+.cm-qq-folder-head:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+.cm-qq-session { border: 0; background: transparent; text-align: left; font: inherit; font-size: 12.5px; padding: 5px 8px 5px 22px; border-radius: 6px; cursor: pointer; color: var(--cm-text, #1f2328); display: flex; justify-content: space-between; gap: 8px; }
+.cm-qq-session:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); }
+.cm-qq-session-active { background: rgba(47, 91, 234, 0.1); color: var(--cm-brand, #2f5bea); font-weight: 600; }
+.cm-qq-form .cm-input { flex: 1 1 180px; min-width: 140px; }
+.cm-app-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: linear-gradient(135deg, #1e6fff, #0b3fbf); color: #fff; }
+.cm-app-title { flex: 1 1 auto; }
+.cm-app-head h2 { margin: 0; font-size: 17px; }
+.cm-app-sub { margin: 2px 0 0; font-size: 12px; opacity: 0.85; }
+.cm-app-body { display: flex; flex-direction: column; gap: 10px; }
+.cm-app-card { border: 1px solid rgba(30, 111, 255, 0.22); border-radius: 10px; padding: 12px; background: rgba(30, 111, 255, 0.045); }
+.cm-app-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cm-app-card h3 { margin: 0; font-size: 13.5px; }
+.cm-qq-members { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cm-qq-member { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.cm-qq-name { font-weight: 600; }
+.cm-qq-id { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #1e6fff; }
+.cm-qq-plan { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.8; }
+.cm-app-credits { background: rgba(15, 23, 42, 0.03); border-color: var(--cm-border, rgba(15, 23, 42, 0.12)); }
+.cm-int-open { margin-left: auto; }
+.cm-int-section { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+.cm-int-section-head { display: flex; align-items: baseline; gap: 8px; }
+.cm-int-section-head h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.cm-int-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.cm-int-card { display: flex; flex-direction: column; gap: 7px; padding: 12px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 10px; background: var(--cm-bg, #ffffff); }
+.cm-int-card:hover { border-color: var(--cm-border-strong, rgba(15, 23, 42, 0.24)); }
+.cm-int-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cm-int-card-name { margin: 0; font-size: 13.5px; font-weight: 650; }
+.cm-int-card-ver { font-size: 11px; color: var(--cm-text-2, #64748b); font-variant-numeric: tabular-nums; }
+.cm-int-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.cm-int-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); color: var(--cm-text-2, #475569); }
+.cm-int-tag-strong { color: var(--cm-brand, #2f5bea); background: rgba(47, 91, 234, 0.1); }
+.cm-int-card-desc { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--cm-text-2, #475569); }
+.cm-int-card-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 2px; }
+.cm-int-link { margin-left: auto; font-size: 12px; color: var(--cm-brand, #2f5bea); text-decoration: none; }
+.cm-int-link:hover { text-decoration: underline; }
+.cm-int-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 34px 8px; }
+.cm-int-empty-title { font-size: 13.5px; font-weight: 600; color: var(--cm-text, #1f2328); }
+.cm-int-empty p { margin: 0; max-width: 520px; line-height: 1.6; }
+.cm-int-path { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; padding: 6px 9px; border-radius: 6px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.05)); color: var(--cm-text, #1f2328); word-break: break-all; }
+.cm-int-empty-actions { display: flex; gap: 8px; margin-top: 4px; }
+.cm-int-guide { border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 10px; background: var(--cm-bg, #ffffff); }
+.cm-int-guide-toggle { width: 100%; text-align: left; border: 0; background: transparent; color: var(--cm-text, #1f2328); font: inherit; font-size: 13px; padding: 10px 12px; cursor: pointer; border-radius: 9px; }
+.cm-int-guide-toggle:hover { background: var(--cm-surface-2, rgba(15, 23, 42, 0.04)); }
+.cm-int-guide-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 1.65; color: var(--cm-text-2, #475569); }
+.cm-int-guide-body ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.cm-int-guide-body p { margin: 0; }
+.cm-int-guide-body .cm-pre { margin: 0; }
 .cm-intro { font-size: 12px; color: var(--cm-text-2, #64748b); background: var(--cm-surface-2, rgba(47, 107, 255, 0.06)); border: 1px solid var(--cm-border, rgba(47, 107, 255, 0.14)); border-radius: 8px; padding: 9px 11px; }
 .cm-doc, .cm-card { border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 10px; padding: 12px; background: var(--cm-bg, #ffffff); }
 .cm-doc-head, .cm-card-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
@@ -1256,6 +1357,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-fav-inline-head' },
           h('span', { className: 'cm-fav-name' }, speaker.name + (speaker.isCurrent ? ' ·当前' : '')),
+
           h(
             'span',
             { className: 'cm-fav-inline-values' },
@@ -1295,6 +1397,30 @@ window.__ModuleLoader__.load({
                 },
               }, '撤销')
             : null,
+            h(
+                        'button',
+                        {
+                          className: 'cm-btn cm-btn-small cm-btn-ghost',
+                          type: 'button',
+                          title: '删除这个人（好感度 / 评价 / 单独记忆一起删）',
+                          disabled: busy,
+                          onClick: async () => {
+                            if (!window.confirm('确定删除「' + speaker.name + '」吗？\n\n他的好感度、多维评价和属于他的单独记忆都会一起删掉，删了找不回来。')) return
+                            setBusy(true)
+                            try {
+                              const result = await apiPost('/speaker/delete', { speakerId: speaker.id, speaker: speaker.name })
+                              if (result && result.removed) notify('已删除「' + speaker.name + '」和他的 ' + (result.removedMemories || 0) + ' 条记忆')
+                              else notify('没删成：' + ((result && result.reason) || '未知原因'), true)
+                              await refresh()
+                            } catch (error) {
+                              notify('删除失败：' + error.message, true)
+                            } finally {
+                              setBusy(false)
+                            }
+                          },
+                        },
+                        '✕',
+                      ),
         ),
         open && dirty
           ? h('input', {
@@ -1825,12 +1951,109 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 「每个人单独一份」：某位成员的记忆卡片（默认收起，点标题展开）。 */
+    function PersonMemoryCard(props) {
+      const { group, speaker, refresh, notify } = props
+      const [open, setOpen] = useState(false)
+      const avatar = speaker && speaker.externalId ? String(speaker.externalId).slice(0, 8) + '…' : ''
+      const count = (group.memories || []).length
+      const favorText = speaker ? ' · 好感度 ' + (speaker.favorability >= 0 ? '+' : '') + speaker.favorability : ''
+      return h(
+        'section',
+        { className: 'cm-card cm-person-card' },
+        h(
+          'button',
+          { className: 'cm-collapse', type: 'button', onClick: () => setOpen((value) => !value) },
+          (open ? '▾ ' : '▸ ') + group.speakerName + '（' + count + ' 条）' + (avatar !== '' ? ' · openid ' + avatar : '') + favorText,
+        ),
+        open
+          ? h(
+              'div',
+              null,
+              speaker && speaker.vectorText ? h('p', { className: 'cm-hint' }, '评价：' + speaker.vectorText) : null,
+
+              count === 0
+                ? h('p', { className: 'cm-muted' }, '还没有关于这个人的单独记忆。')
+                : h(
+                    'ul',
+                    { className: 'cm-person-memories' },
+                    (group.memories || []).map((memory) =>
+                      h(
+                        'li',
+                        { key: memory.id, className: 'cm-person-memory' },
+                        h('span', { className: 'cm-person-memory-text' }, memory.text),
+                        h('span', { className: 'cm-memory-meta' }, (memory.createdAtLocal || memory.createdDay || '') + (memory.weight ? '｜权重 ' + memory.weight : '')),
+                      ),
+                    ),
+                  ),
+            )
+          : null,
+      )
+    }
+
+    /** 群成员总体记忆：全体共有，不针对某个人。 */
+    function GroupMemoryList(props) {
+      const { snapshot, refresh, notify } = props
+      const [busy, setBusy] = useState('')
+      const items = snapshot.groupMemories || []
+      const remove = useCallback(async (id) => {
+        setBusy(id)
+        try {
+          await apiPost('/group/memory/delete', { id })
+          notify('已删除这条群成员总体记忆')
+          await refresh()
+        } catch (error) {
+          notify('删除失败：' + error.message, true)
+        } finally {
+          setBusy('')
+        }
+      }, [refresh, notify])
+      return h(
+        'section',
+        { className: 'cm-card' },
+        h(
+          'div',
+          { className: 'cm-card-head' },
+          h('h3', null, '群成员总体记忆'),
+          h('span', { className: 'cm-muted' }, items.length + ' 条 · 全体共有'),
+        ),
+        h('p', { className: 'cm-hint' }, '整个群共同的事（群事件、群氛围、大家的约定和梗），不针对某一个人；按日期 + 权重记，每个对话各存一份。'),
+        items.length === 0
+          ? h('p', { className: 'cm-muted' }, '还没有群成员总体记忆。')
+          : h(
+              'div',
+              { className: 'cm-memory-list' },
+              items.map((memory) =>
+                h(
+                  'div',
+                  { key: memory.id, className: 'cm-memory' },
+                  h('div', { className: 'cm-memory-text' }, memory.text),
+                  h(
+                    'div',
+                    { className: 'cm-memory-meta' },
+                    h('span', null, formatStamp(memory.createdAt) || memory.createdDay || ''),
+                    h('span', null, '权重 ' + (memory.weight ?? 50)),
+                    h(
+                      'button',
+                      { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: busy === memory.id, onClick: () => remove(memory.id) },
+                      busy === memory.id ? '…' : '删除',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+      )
+    }
+
     function MemoryTab(props) {
       const { snapshot, refresh, notify } = props
       const [draft, setDraft] = useState('')
       const [tags, setTags] = useState('')
       const [busy, setBusy] = useState(false)
       const [showArchived, setShowArchived] = useState(false)
+      const [showLife, setShowLife] = useState(false)
+      const [showHabits, setShowHabits] = useState(false)
+      const [showGlobalMemories, setShowGlobalMemories] = useState(false)
       // 向量/权重默认藏在后台，需要时再展开（用户不想面板被长串数字占满）。
       const [showDetails, setShowDetails] = useState(false)
       // 1.1.0-C：记忆体检（只读扫描 + 一键整理）
@@ -1890,6 +2113,8 @@ window.__ModuleLoader__.load({
       }, [draft, tags, notify, refresh])
 
       const active = snapshot.memories.active || []
+      const lifeMemories = active.filter((memory) => Array.isArray(memory.tags) && memory.tags.includes('生活'))
+      const habitMemories = active.filter((memory) => Array.isArray(memory.tags) && memory.tags.includes('习惯'))
       const archived = snapshot.memories.archived || []
       const memoryById = new Map(active.map((memory) => [String(memory.id), memory]))
       const memoryTextOf = (id) => {
@@ -1952,32 +2177,65 @@ window.__ModuleLoader__.load({
               : null,
           ),
         ),
-        h(EvolutionCard, { snapshot, refresh, notify, showDetails }),
+        h(CollapsibleCard, { title: '人格演化', defaultOpen: false }, h(EvolutionCard, { snapshot, refresh, notify, showDetails })),
         h(
           'section',
           { className: 'cm-card' },
           h(
-            'div',
-            { className: 'cm-card-head' },
-            h('h3', null, '全局活跃记忆'),
-            h(
-              'div',
-              { className: 'cm-actions' },
-              h('span', { className: 'cm-muted' }, `${snapshot.memories.activeCount}/${snapshot.memories.limit} 条上限`),
-              h(
-                'button',
-                { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => setShowDetails(!showDetails) },
-                showDetails ? '隐藏向量/权重' : '显示向量/权重',
-              ),
-            ),
+            'button',
+            { className: 'cm-collapse', type: 'button', onClick: () => setShowGlobalMemories((value) => !value) },
+            `${showGlobalMemories ? '▾' : '▸'} 全局活跃记忆（${snapshot.memories.activeCount}/${snapshot.memories.limit} 条上限）`,
           ),
-          h('p', { className: 'cm-hint' }, '重点原文保持原样，AI 只能决定保存/调取，不能改写。满 30 个交互日后自动移入知识库。'),
-          showDetails && (snapshot.vectorDimensions || []).length > 0
-            ? h('p', { className: 'cm-hint' }, `AI 自己建的全局向量维度（所有对话通用）：${(snapshot.vectorDimensions || []).map((item) => `${item.label}${item.desc ? `（${item.desc}）` : ''}·${item.usedBy ?? 0}条在用`).join('、')}`)
+          showGlobalMemories
+            ? h(
+                'div',
+                null,
+                h('p', { className: 'cm-hint' }, '重点原文保持原样，AI 只能决定保存/调取，不能改写。满 30 个交互日后自动移入知识库。'),
+                h(
+                  'div',
+                  { className: 'cm-actions' },
+                  h(
+                    'button',
+                    { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => setShowDetails(!showDetails) },
+                    showDetails ? '隐藏向量/权重' : '显示向量/权重',
+                  ),
+                ),
+                showDetails && (snapshot.vectorDimensions || []).length > 0
+                  ? h('p', { className: 'cm-hint' }, `AI 自己建的全局向量维度（所有对话通用）：${(snapshot.vectorDimensions || []).map((item) => `${item.label}${item.desc ? `（${item.desc}）` : ''}·${item.usedBy ?? 0}条在用`).join('、')}`)
+                  : null,
+                active.length === 0
+                  ? h('p', { className: 'cm-muted' }, '暂无活跃记忆。')
+                  : h('div', { className: 'cm-memory-list' }, active.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails }))),
+              )
             : null,
-          active.length === 0
-            ? h('p', { className: 'cm-muted' }, '暂无活跃记忆。')
-            : h('div', { className: 'cm-memory-list' }, active.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails }))),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'button',
+            { className: 'cm-collapse', type: 'button', onClick: () => setShowLife((value) => !value) },
+            `${showLife ? '▾' : '▸'} 生活类（${lifeMemories.length} 条 · 每 7 个交互日自动清空）`,
+          ),
+          showLife
+            ? lifeMemories.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有生活记录。AI 会在聊到起床/吃饭/睡觉/出门这些事时自动记一条。')
+              : h('div', { className: 'cm-memory-list' }, lifeMemories.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails })))
+            : null,
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'button',
+            { className: 'cm-collapse', type: 'button', onClick: () => setShowHabits((value) => !value) },
+            `${showHabits ? '▾' : '▸'} 对话人习惯（${habitMemories.length} 条 · 长期不清）`,
+          ),
+          showHabits
+            ? habitMemories.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有习惯记录。AI 会在聊到作息/上下班上下学/爱吃什么/爱玩什么时自动记一条。')
+              : h('div', { className: 'cm-memory-list' }, habitMemories.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails })))
+            : null,
         ),
         h(
           'section',
@@ -2027,6 +2285,28 @@ window.__ModuleLoader__.load({
                   ),
                 )
             : null,
+        ),
+        h(GroupMemoryList, { snapshot, refresh, notify }),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'div',
+            { className: 'cm-card-head' },
+            h('h3', null, '按成员分开的记忆'),
+            h('span', { className: 'cm-muted' }, (snapshot.speakers || []).length + ' 个说话人'),
+          ),
+          h('p', { className: 'cm-hint' }, '每个人单独一份：他的评价（好感度 / 多维评价）和属于他的记忆；没标明归属的放在最后。'),
+          (snapshot.memoriesBySpeaker || []).length === 0
+            ? h('p', { className: 'cm-muted' }, '还没有记忆。')
+            : h(
+                'div',
+                { className: 'cm-person-list' },
+                (snapshot.memoriesBySpeaker || []).map((group) => {
+                  const speaker = (snapshot.speakers || []).find((item) => item.id === group.speakerId) || null
+                  return h(PersonMemoryCard, { key: group.speakerId, group, speaker, refresh, notify })
+                }),
+              ),
         ),
       )
     }
@@ -2815,6 +3095,1187 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // ── 接入软件 tab ────────────────────────────────────────────────────────
+
+    /** 一条清单的可搜索文本：名称 / 说明 / 作者 / 分类 / 标签 / 能力。 */
+    function integrationHaystack(item) {
+      return [
+        item.name,
+        item.description,
+        item.author,
+        item.category,
+        ...(Array.isArray(item.tags) ? item.tags : []),
+        ...(Array.isArray(item.capabilities) ? item.capabilities : []),
+      ]
+        .join(' ')
+        .toLowerCase()
+    }
+
+    /** 主页只认 http(s)，清单里塞 javascript: 之类的一律不渲染。 */
+    function integrationHomepage(item) {
+      const raw = typeof item.homepage === 'string' ? item.homepage.trim() : ''
+      return /^https?:\/\//i.test(raw) ? raw : ''
+    }
+
+    /**
+     * 「申请收录软件」跳转：GitHub 新建 Issue（用仓库里的收录模板），
+     * 和插件市场把「申请收录插件」指到 GitHub 文档是同一个做法。
+     */
+    const INTEGRATION_SUBMIT_URL =
+      'https://github.com/Root-7-KHX/companion-memory/issues/new?template=integration_submission.md'
+
+    /** 示例清单：面板里「怎么接入」那段直接显示它，用户照抄就行。 */
+    const SAMPLE_INTEGRATION = {
+      id: 'example-software',
+      name: '示例软件',
+      description: '把这份 JSON 改成你要接入的软件：说清它是什么、能干什么。',
+      version: '0.1.0',
+      author: '你的名字',
+      category: '通道',
+      tags: ['示例', '改我'],
+      capabilities: ['读消息', '发消息'],
+      homepage: 'https://github.com/your-name/your-integration',
+    }
+
+    /** 自带的 QQ 机器人应用（点开就能用，不依赖 dsh-qqbot）。 */
+    function QqbotBuiltinApp(props) {
+      const { onBack } = props
+      const [people, setPeople] = useState(null)
+      const [error, setError] = useState('')
+      const [busy, setBusy] = useState(false)
+      const load = useCallback(async () => {
+        setBusy(true)
+        try {
+          const response = await fetch(API_BASE + '/people?limit=200', { headers: { accept: 'application/json' }, credentials: 'same-origin' })
+          setPeople(await unwrap(response))
+          setError('')
+        } catch (caught) {
+          setError(caught.message)
+        } finally {
+          setBusy(false)
+        }
+      }, [])
+      useEffect(() => { load() }, [load])
+      const [qqStatus, setQqStatus] = useState(null)
+      const [qqConfig, setQqConfig] = useState(null)
+      const [appIdDraft, setAppIdDraft] = useState('')
+      const [secretDraft, setSecretDraft] = useState('')
+      const [qqNotice, setQqNotice] = useState('')
+      const [qqBusy, setQqBusy] = useState('')
+      const [qqMessages, setQqMessages] = useState([])
+      const [stickers, setStickers] = useState([])
+      const [schedules, setSchedules] = useState([])
+      const [stickerBusy, setStickerBusy] = useState('')
+      const [scheduleDraft, setScheduleDraft] = useState({ time: '', content: '', scope: 'group', targetId: '', weekdays: '' })
+      const [scheduleNotice, setScheduleNotice] = useState('')
+      const [groupDraft, setGroupDraft] = useState({ groupId: '', memberId: '', minutes: '10' })
+      const [groupNotice, setGroupNotice] = useState('')
+      const [joinRequests, setJoinRequests] = useState([])
+      const [broadcastDraft, setBroadcastDraft] = useState({ scope: 'group', targetIds: '', content: '' })
+      const [broadcastNotice, setBroadcastNotice] = useState('')
+      const [broadcastBusy, setBroadcastBusy] = useState(false)
+      const [bridge, setBridge] = useState(null)
+      const [bridgeDraft, setBridgeDraft] = useState('')
+      const [bridgeNotice, setBridgeNotice] = useState('')
+      const [qqSessions, setQqSessions] = useState([])
+      const [qqSessionGroups, setQqSessionGroups] = useState([])
+      const [bridgePickerOpen, setBridgePickerOpen] = useState(false)
+      const [collapsedWs, setCollapsedWs] = useState({})
+      const [qqPeers, setQqPeers] = useState([])
+      const [allowedPeers, setAllowedPeers] = useState([])
+      const [allowedDirty, setAllowedDirty] = useState(false)
+      const [vpSamples, setVpSamples] = useState([])
+      const [vpDraft, setVpDraft] = useState({ freeEnrollSeconds: 60, autoCollectAbove: 0.7, autoCollectAboveWhenFull: 0.8, threshold: 0.55, maxSeconds: 300 })
+      const [vpNotice, setVpNotice] = useState('')
+      const [vpBusy, setVpBusy] = useState(false)
+      const [vpInit, setVpInit] = useState(false)
+      const [vpMembers, setVpMembers] = useState([])
+      const [vpAllowed, setVpAllowed] = useState([])
+      const [vpMemberDraft, setVpMemberDraft] = useState([])
+      const [vpMemberNotice, setVpMemberNotice] = useState('')
+      const [routes, setRoutes] = useState([])
+      const [routeSessions, setRouteSessions] = useState([])
+      const [routeDefault, setRouteDefault] = useState('')
+      const [routeNotice, setRouteNotice] = useState('')
+      const [routeWorkspaces, setRouteWorkspaces] = useState([])
+      const [routePickerOpen, setRoutePickerOpen] = useState('')
+
+      const loadQq = useCallback(async () => {
+        try {
+          const get = (path) => fetch(API_BASE + path, { headers: { accept: 'application/json' }, credentials: 'same-origin' }).then(unwrap)
+          const [status, config, messages, stickerList, scheduleList, bridgeInfo, sessionList, peerInfo] = await Promise.all([
+            get('/qq/status'),
+            get('/qq/config'),
+            get('/qq/messages?limit=10'),
+            get('/qq/stickers?limit=60'),
+            get('/qq/schedule'),
+            get('/qq/bridge'),
+            get('/qq/bridge/sessions'),
+            get('/qq/peers'),
+          ])
+          setBridge(bridgeInfo)
+          setQqSessions(Array.isArray(sessionList && sessionList.items) ? sessionList.items : [])
+          setQqSessionGroups(Array.isArray(sessionList && sessionList.groups) ? sessionList.groups : [])
+          setQqPeers(Array.isArray(peerInfo && peerInfo.items) ? peerInfo.items : [])
+          setAllowedPeers(Array.isArray(peerInfo && peerInfo.allowedPeers) ? peerInfo.allowedPeers : [])
+          setQqStatus(status)
+          setQqConfig(config)
+          setQqMessages(Array.isArray(messages) ? messages : [])
+          setStickers(Array.isArray(stickerList) ? stickerList : [])
+          setSchedules(Array.isArray(scheduleList) ? scheduleList : [])
+          try {
+            const sampleList = await get('/qq/voiceprint/samples')
+            setVpSamples(Array.isArray(sampleList) ? sampleList : [])
+          } catch {
+            // 声纹接口失败不影响 QQ 主面板
+          }
+          try {
+            const routeInfo = await get('/qq/routes')
+            setRoutes(Array.isArray(routeInfo && routeInfo.items) ? routeInfo.items : [])
+            setRouteWorkspaces(Array.isArray(routeInfo && routeInfo.workspaces) ? routeInfo.workspaces : [])
+            setRouteSessions(Array.isArray(routeInfo && routeInfo.sessions) ? routeInfo.sessions : [])
+            setRouteDefault((routeInfo && routeInfo.defaultSessionId) || '')
+          } catch {
+            // 路由接口失败不影响 QQ 主面板
+          }
+          try {
+            const memberInfo = await get('/qq/voiceprint/members')
+            const allowed = Array.isArray(memberInfo && memberInfo.allowed) ? memberInfo.allowed : []
+            setVpMembers(Array.isArray(memberInfo && memberInfo.items) ? memberInfo.items : [])
+            setVpAllowed(allowed)
+            setVpMemberDraft((prev) => (prev.length === 0 ? allowed : prev))
+          } catch {
+            // 同上
+          }
+          const vpStatus = status && status.voiceprint
+          if (vpStatus) {
+            setVpInit((prev) => {
+              if (!prev) {
+                setVpDraft({
+                  freeEnrollSeconds: String(vpStatus.freeEnrollSeconds ?? 60),
+                  autoCollectAbove: String(vpStatus.autoCollectAbove ?? 0.7),
+                  autoCollectAboveWhenFull: String(vpStatus.autoCollectAboveWhenFull ?? 0.8),
+                  threshold: String(vpStatus.threshold ?? 0.55),
+                  maxSeconds: String(vpStatus.maxSeconds ?? 300),
+                })
+              }
+              return true
+            })
+          }
+        } catch (caught) {
+          setQqNotice('读取连接状态失败：' + caught.message)
+        }
+      }, [])
+
+      useEffect(() => {
+        loadQq()
+        const timer = setInterval(loadQq, 5000)
+        return () => clearInterval(timer)
+      }, [loadQq])
+
+      const connectQq = useCallback(async () => {
+        setQqBusy('save')
+        try {
+          const appId = appIdDraft !== '' ? appIdDraft : (qqConfig && qqConfig.appId) || ''
+          await apiPost('/qq/config', { appId, appSecret: secretDraft, enabled: true })
+          setSecretDraft('')
+          const started = await apiPost('/qq/start', {})
+          setQqStatus(started)
+          setQqNotice(started && started.connected ? '已连接 QQ' : '配置已保存，正在连接…（同一个机器人只能有一条网关连接）')
+          await loadQq()
+        } catch (error) {
+          setQqNotice('连接失败：' + error.message)
+        } finally {
+          setQqBusy('')
+        }
+      }, [appIdDraft, secretDraft, qqConfig, loadQq])
+
+      const disconnectQq = useCallback(async () => {
+        setQqBusy('stop')
+        try {
+          setQqStatus(await apiPost('/qq/stop', {}))
+          setQqNotice('已断开 QQ')
+        } catch (error) {
+          setQqNotice('断开失败：' + error.message)
+        } finally {
+          setQqBusy('')
+        }
+      }, [])
+
+      const groupAction = useCallback(async (kind) => {
+        setGroupNotice('')
+        const groupId = groupDraft.groupId.trim()
+        const memberIds = groupDraft.memberId.split(/[，,\s]+/).map((item) => item.trim()).filter(Boolean)
+        try {
+          if (kind === 'info') {
+            const info = await apiGet('/qq/group/info?groupId=' + encodeURIComponent(groupId))
+            setGroupNotice('群信息：' + JSON.stringify(info).slice(0, 160))
+            return
+          }
+          if (kind === 'requests') {
+            const page = await apiGet('/qq/join-requests?groupId=' + encodeURIComponent(groupId))
+            setJoinRequests(Array.isArray(page && page.data) ? page.data : [])
+            setGroupNotice('拉取到 ' + (Array.isArray(page && page.data) ? page.data.length : 0) + ' 条入群申请')
+            return
+          }
+          if (kind === 'mute') await apiPost('/qq/mute', { groupId, memberOpenids: memberIds, minutes: Number(groupDraft.minutes) || 10 })
+          if (kind === 'unmute') await apiPost('/qq/mute', { groupId, memberOpenids: memberIds, unmute: true })
+          if (kind === 'kick') await apiPost('/qq/kick', { groupId, memberOpenids: memberIds })
+          if (kind === 'approve' || kind === 'decline') await apiPost('/qq/join-approve', { groupId, memberOpenid: memberIds[0] || '', op: kind === 'approve' ? 'approve' : 'decline' })
+          setGroupNotice('已执行：' + kind)
+        } catch (error) {
+          setGroupNotice('失败：' + error.message)
+        }
+      }, [groupDraft])
+
+      const recallMessage = useCallback(async (message) => {
+        try {
+          await apiPost('/qq/recall', { scope: message.scope, targetId: message.peerId, messageId: message.id })
+          setScheduleNotice('已撤回：' + String(message.content || '').slice(0, 20))
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('撤回失败：' + error.message)
+        }
+      }, [loadQq])
+
+      const deleteSticker = useCallback(async (id) => {
+        setStickerBusy(id)
+        try {
+          await apiPost('/qq/stickers/delete', { id })
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('删表情包失败：' + error.message)
+        } finally {
+          setStickerBusy('')
+        }
+      }, [loadQq])
+
+      const addSchedule = useCallback(async () => {
+        try {
+          const weekdays = String(scheduleDraft.weekdays || '').split(/[,，\s]+/).map(Number).filter((n) => n >= 1 && n <= 7)
+          await apiPost('/qq/schedule', { ...scheduleDraft, weekdays })
+          setScheduleDraft({ time: '', content: '', scope: 'group', targetId: '', weekdays: '' })
+          setScheduleNotice('已添加定时消息')
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('添加失败：' + error.message)
+        }
+      }, [scheduleDraft, loadQq])
+
+      const saveBridge = useCallback(async (patch) => {
+        try {
+          const next = await apiPost('/qq/bridge', { sessionId: bridgeDraft !== '' ? bridgeDraft : (bridge && bridge.sessionId) || '', ...patch })
+          setBridge(next)
+          setBridgeNotice('已保存')
+          await loadQq()
+        } catch (error) {
+          setBridgeNotice('保存失败：' + error.message)
+        }
+      }, [bridgeDraft, bridge, loadQq])
+
+      const runBroadcast = useCallback(async () => {
+        setBroadcastBusy(true)
+        setBroadcastNotice('')
+        try {
+          const result = await apiPost('/qq/broadcast', broadcastDraft)
+          setBroadcastNotice('群发完成：成功 ' + result.sent + ' / 失败 ' + result.failed)
+        } catch (error) {
+          setBroadcastNotice('群发失败：' + error.message)
+        } finally {
+          setBroadcastBusy(false)
+        }
+      }, [broadcastDraft])
+
+      const sendSticker = useCallback(async (stickerId) => {
+        try {
+          await apiPost('/qq/sticker/send', { stickerId })
+          setScheduleNotice('已发表情包')
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('发表情包失败：' + error.message)
+        }
+      }, [loadQq])
+
+      const toggleAutoSticker = useCallback(async () => {
+        const current = qqConfig && qqConfig.autoSticker ? qqConfig.autoSticker.enabled === true : false
+        try {
+          await apiPost('/qq/autosticker', { enabled: !current })
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('切换失败：' + error.message)
+        }
+      }, [qqConfig, loadQq])
+
+      const deleteSchedule = useCallback(async (id) => {
+        try {
+          await apiPost('/qq/schedule/delete', { id })
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('删除失败：' + error.message)
+        }
+      }, [loadQq])
+
+      const saveAutoRoute = useCallback(async (patch) => {
+        if (!bridge) return
+        try {
+          await apiPost('/qq/bridge', {
+            enabled: bridge.enabled === true,
+            sessionId: bridge.sessionId || '',
+            approvalEnabled: bridge.approvalEnabled === true,
+            approvalTimeoutMs: bridge.approvalTimeoutMs,
+            autoCreateSession: patch.autoCreateSession !== undefined ? patch.autoCreateSession : bridge.autoCreateSession !== false,
+            autoSessionCwd: patch.autoSessionCwd !== undefined ? patch.autoSessionCwd : (bridge.autoSessionCwd || ''),
+            autoSessionWorkspaceId: patch.autoSessionWorkspaceId !== undefined ? patch.autoSessionWorkspaceId : (bridge.autoSessionWorkspaceId || ''),
+          })
+          setRouteNotice('已保存自动新建设置')
+          await loadQq()
+        } catch (caught) {
+          setRouteNotice('保存失败：' + caught.message)
+        }
+      }, [bridge, loadQq])
+
+      const renamePeerRoute = useCallback(async (key, name) => {
+        try {
+          await apiPost('/qq/peers/rename', { key, name })
+          setRouteNotice('名字已保存')
+          await loadQq()
+        } catch (caught) {
+          setRouteNotice('改名失败：' + caught.message)
+        }
+      }, [loadQq])
+
+      const setPeerRoute = useCallback(async (key, sessionId) => {
+        try {
+          await apiPost('/qq/routes', { key, sessionId })
+          setRouteNotice('已保存：这条 QQ 聊天走指定会话')
+          await loadQq()
+        } catch (caught) {
+          setRouteNotice('保存失败：' + caught.message)
+        }
+      }, [loadQq])
+
+      const saveVoiceprint = useCallback(async () => {
+        setVpBusy(true)
+        try {
+          await apiPost('/qq/voiceprint', {
+            enabled: true,
+            threshold: Number(vpDraft.threshold),
+            autoCollectAbove: Number(vpDraft.autoCollectAbove),
+            autoCollectAboveWhenFull: Number(vpDraft.autoCollectAboveWhenFull),
+            freeEnrollSeconds: Number(vpDraft.freeEnrollSeconds),
+            maxSeconds: Number(vpDraft.maxSeconds),
+          })
+          setVpNotice('声纹设置已保存')
+          await loadQq()
+        } catch (caught) {
+          setVpNotice('保存失败：' + caught.message)
+        } finally {
+          setVpBusy(false)
+        }
+      }, [vpDraft, loadQq])
+
+      const toggleVpMember = useCallback((externalId) => {
+        setVpMemberDraft((prev) => (prev.includes(externalId) ? prev.filter((item) => item !== externalId) : prev.concat([externalId])))
+      }, [])
+
+      const saveVpMembers = useCallback(async () => {
+        try {
+          await apiPost('/qq/voiceprint/members', { allowedMembers: vpMemberDraft })
+          setVpMemberNotice('已保存勾选（' + vpMemberDraft.length + ' 人）')
+          await loadQq()
+        } catch (caught) {
+          setVpMemberNotice('保存失败：' + caught.message)
+        }
+      }, [vpMemberDraft, loadQq])
+
+      const deleteVoiceSample = useCallback(async (name, index) => {
+        try {
+          await apiPost('/qq/voiceprint/sample/delete', { name, index })
+          setVpNotice('已删除 1 条样本')
+          await loadQq()
+        } catch (caught) {
+          setVpNotice('删除失败：' + caught.message)
+        }
+      }, [loadQq])
+
+      // 消息转发：当前选中的会话 + 按工作区（文件夹）分组的下拉树
+      const selectedSessionId = bridgeDraft !== '' ? bridgeDraft : (bridge && bridge.sessionId) || ''
+      const selectedSession = qqSessions.find((item) => item.id === selectedSessionId) || null
+      const selectedSessionTitle = selectedSession ? (selectedSession.title || '对话 ' + String(selectedSession.id).slice(0, 8)) : ''
+      const bridgeFolders = (qqSessionGroups.length > 0 ? qqSessionGroups : [{ key: '__all__', label: '对话', sessions: qqSessions }])
+        .filter((group) => Array.isArray(group.sessions) && group.sessions.length > 0)
+
+      const items = people && Array.isArray(people.items) ? people.items : []
+      const vpInfo = qqStatus && qqStatus.voiceprint
+      return h(
+        'div',
+        { className: 'cm-app' },
+        h(
+          'div',
+          { className: 'cm-app-head' },
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
+          h('div', { className: 'cm-app-title' }, h('h2', null, 'QQ 机器人'), h('p', { className: 'cm-app-sub' }, '自带应用 · 不用安装 dsh-qqbot')),
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy, onClick: load }, busy ? '刷新中…' : '刷新'),
+        ),
+        h(
+          'div',
+          { className: 'cm-app-body' },
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h('div', { className: 'cm-app-card-head' }, h('h3', null, 'QQ 群聊/私聊 → 选 AI（每条独立）'), h('span', { className: 'cm-badge' }, bridge && bridge.enabled ? '接管中' : '已关'), h('span', { className: 'cm-muted' }, routes.length + ' 条')),
+            h('p', { className: 'cm-hint' }, '这里一行就是一个 QQ 群聊/私聊；右边下拉是给这个群单独选一个 AI 会话。群聊要等群里给机器人发过消息（@ 我一次）才会出现在列表里——QQ 官方没有“列出全部群”的接口，只能收到消息后反查群名。'),
+            h(
+              'div',
+              { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '4px 0 6px' } },
+              h('span', { className: 'cm-hint', style: { flex: '1 1 100%' } }, '没指定 AI 的聊天默认 = 新建会话，建在：'),
+              h(
+                'select',
+                {
+                  className: 'cm-input',
+                  style: {
+                    flex: '1 1 100%',
+                    width: '100%',
+                    minWidth: '0',
+                    maxWidth: '100%',
+                    height: 'auto',
+                    minHeight: '38px',
+                    padding: '8px 10px',
+                    lineHeight: '1.5',
+                    fontSize: '13px',
+                  },
+                  value: (bridge && bridge.autoSessionWorkspaceId) || '',
+                  onChange: (event) => saveAutoRoute({ autoSessionWorkspaceId: event.target.value }),
+                },
+                h('option', { value: '' }, '未指定（默认工作区）'),
+                routeWorkspaces.map((workspace) => h('option', { key: workspace.id, value: workspace.id }, workspace.label + '（' + workspace.cwd + '）')),
+              ),
+              h(
+                'label',
+                { style: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: '0 0 100%' } },
+                h('input', { type: 'checkbox', checked: !(bridge && bridge.autoCreateSession === false), onChange: (event) => saveAutoRoute({ autoCreateSession: event.target.checked }) }),
+                h('span', { className: 'cm-hint' }, '自动新建 AI 会话并回答'),
+              ),
+            ),
+            routes.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有 QQ 聊天；QQ 收到消息后这里会自动出现。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  routes.map((item) =>
+                    (() => {
+                      const currentSession = routeSessions.find((session) => session.id === item.sessionId) || null
+                      const currentLabel = currentSession ? (currentSession.title || '对话 ' + String(currentSession.id).slice(0, 8)) : '自动新建会话'
+                      const seen = new Set(routeWorkspaces.map((workspace) => workspace.cwd))
+                      const loose = routeSessions.filter((session) => !seen.has(session.cwd || ''))
+                      const folder = (key, label, sessions) => {
+                        const collapsed = collapsedWs['route:' + key] === true
+                        return h(
+                          'div',
+                          { key, className: 'cm-qq-folder' },
+                          h(
+                            'button',
+                            { className: 'cm-qq-folder-head', type: 'button', onClick: () => setCollapsedWs((prev) => ({ ...prev, ['route:' + key]: !collapsed })) },
+                            (collapsed ? '▸ ' : '▾ ') + label + '（' + sessions.length + '）',
+                          ),
+                          collapsed
+                            ? null
+                            : sessions.map((session) =>
+                                h(
+                                  'button',
+                                  {
+                                    key: session.id,
+                                    className: 'cm-qq-session' + (session.id === item.sessionId ? ' cm-qq-session-active' : ''),
+                                    type: 'button',
+                                    title: session.id,
+                                    onClick: () => { setPeerRoute(item.key, session.id); setRoutePickerOpen('') },
+                                  },
+                                  h('span', { className: 'cm-qq-session-name' }, session.title || '对话 ' + String(session.id).slice(0, 8)),
+                                  session.enabled ? h('span', { className: 'cm-muted' }, '记忆开') : null,
+                                ),
+                              ),
+                        )
+                      }
+                      return h(
+                        'li',
+                        { key: item.key, className: 'cm-qq-member', style: { alignItems: 'center', flexWrap: 'wrap' } },
+                        h('input', {
+                          className: 'cm-input',
+                          style: { flex: '0 0 150px', width: '150px', minWidth: '150px' },
+                          defaultValue: item.name || '',
+                          placeholder: '未命名',
+                          key: item.key + ':' + (item.name || ''),
+                          onBlur: (event) => {
+                            const next = String(event.target.value || '').trim()
+                            if (next !== (item.name || '')) renamePeerRoute(item.key, next)
+                          },
+                        }),
+                        h('span', { className: 'cm-muted', style: { flex: '0 0 56px', textAlign: 'center' } }, item.scope === 'group' ? '（群）' : '（私聊）'),
+                        h('span', { className: 'cm-qq-id', style: { flex: '0 0 92px', textAlign: 'left' } }, item.peerId ? String(item.peerId).slice(0, 8) + '…' : ''),
+                        h(
+                          'div',
+                          { className: 'cm-qq-picker' },
+                          h(
+                            'button',
+                            {
+                              className: 'cm-btn cm-btn-small cm-qq-picker-btn',
+                              type: 'button',
+                              title: currentLabel,
+                              style: { whiteSpace: 'normal', overflow: 'visible', textOverflow: 'clip', lineHeight: '1.4' },
+                              onClick: () => setRoutePickerOpen((open) => (open === item.key ? '' : item.key)),
+                            },
+                            currentLabel + ' ▾',
+                          ),
+                          routePickerOpen === item.key
+                            ? h(
+                                'div',
+                                { className: 'cm-qq-picker-panel' },
+                                h(
+                                  'div',
+                                  { className: 'cm-qq-picker-head' },
+                                  h('span', { className: 'cm-muted' }, '按工作区（文件夹）分组，点文件夹展开/收起'),
+                                  h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => setRoutePickerOpen('') }, '收起'),
+                                ),
+                                h(
+                                  'button',
+                                  { className: 'cm-btn cm-btn-small', type: 'button', style: { margin: '0 0 6px' }, onClick: () => { setPeerRoute(item.key, ''); setRoutePickerOpen('') } },
+                                  '不指定（自动新建会话）',
+                                ),
+                                routeWorkspaces.map((workspace) => folder(workspace.id, workspace.label || workspace.cwd, routeSessions.filter((session) => (session.cwd || '') === workspace.cwd))),
+                                loose.length > 0 ? folder('loose', '未分组', loose) : null,
+                              )
+                            : null,
+                        ),
+                        (() => {
+                          const allKeys = qqPeers.map((peer) => peer.key)
+                          const checked = allowedPeers.length === 0 || allowedPeers.includes(item.key)
+                          return h(
+                            'label',
+                            { className: 'cm-qq-peer', style: { gap: '4px' } },
+                            h('input', {
+                              type: 'checkbox',
+                              checked,
+                              onChange: () => {
+                                const current = allowedPeers.length === 0 ? allKeys : allowedPeers
+                                const next = checked ? current.filter((key) => key !== item.key) : [...new Set([...current, item.key])]
+                                const normalized = next.length >= allKeys.length ? [] : next
+                                setAllowedPeers(normalized)
+                                saveBridge({ allowedPeers: normalized })
+                              },
+                            }),
+                            h('span', { className: 'cm-hint' }, '接'),
+                          )
+                        })(),
+                        h('span', { className: 'cm-muted' }, '消息 ' + item.count),
+                      )
+                    })(),
+                  ),
+                ),
+            routeNotice ? h('p', { className: 'cm-hint' }, routeNotice) : null,
+            h('div', { style: { borderTop: '1px solid rgba(127,127,127,0.25)', margin: '8px 0 6px' } }),
+            h('p', { className: 'cm-hint' }, '总开关（关掉就完全不理 QQ）；审批请求会推成 QQ 卡片（按钮或 /approve 验证码都能批）：'),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h(
+                'label',
+                { className: 'cm-switch' },
+                h('input', { type: 'checkbox', checked: !!(bridge && bridge.enabled), onChange: (event) => saveBridge({ enabled: event.target.checked }) }),
+                h('span', { className: 'cm-switch-slider' }),
+                h('span', { className: 'cm-switch-text' }, bridge && bridge.enabled ? '接管中（点一下关闭）' : '已关闭（点一下开启）'),
+              ),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => saveBridge({ approvalEnabled: !(bridge && bridge.approvalEnabled) }) }, '审批卡片：' + (bridge && bridge.approvalEnabled ? '开' : '关')),
+            ),
+            bridgeNotice ? h('p', { className: 'cm-hint' }, bridgeNotice) : null,
+            bridge && bridge.lastPeer ? h('p', { className: 'cm-hint' }, '最近 QQ 会话：' + bridge.lastPeer.scope + ' · ' + String(bridge.lastPeer.peerId).slice(0, 12) + '… · 待审批 ' + bridge.pendingApprovals) : null,
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h('div', { className: 'cm-app-card-head' }, h('h3', null, '群成员'), h('span', { className: 'cm-muted' }, items.length + ' 人')),
+            h('p', { className: 'cm-hint' }, '按稳定 openid 认人：改昵称也还是同一个人，旧名字留在历史里。'),
+            error ? h('div', { className: 'cm-banner cm-banner-error' }, '读取失败：' + error) : null,
+            items.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有群成员档案。QQ 侧把消息送进来之后，这里会自动出现（按 openid 归并）。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  items.map((person) =>
+                    h(
+                      'li',
+                      { key: person.externalId, className: 'cm-qq-member' },
+                      h('span', { className: 'cm-qq-name' }, person.currentName || '未命名'),
+                      h('span', { className: 'cm-qq-id' }, String(person.externalId).slice(0, 10) + '…'),
+                      h('span', { className: 'cm-muted' }, '消息 ' + person.msgCount + (person.names && person.names.length ? ' · 曾用名 ' + person.names.map((item) => item.name).join('、') : '')),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '连接 QQ'),
+              h('span', { className: 'cm-badge' }, qqStatus ? (qqStatus.connected ? '已连接' : qqStatus.status || '未连接') : '读取中…'),
+            ),
+            h('p', { className: 'cm-hint' }, '原生连接：AI记忆 自己连 QQ 官方网关（不经过 dsh-qqbot）。同一个机器人只能有一条网关连接，连之前先把 dsh-qqbot 那边的 QQ 停掉，不然会互相顶掉。'),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('input', {
+                className: 'cm-input',
+                type: 'text',
+                placeholder: 'appId',
+                value: appIdDraft !== '' ? appIdDraft : (qqConfig && qqConfig.appId) || '',
+                onChange: (event) => setAppIdDraft(event.target.value),
+              }),
+              h('input', {
+                className: 'cm-input',
+                type: 'password',
+                placeholder: qqConfig && qqConfig.hasSecret ? 'appSecret 已保存（留空不改）' : 'appSecret',
+                value: secretDraft,
+                onChange: (event) => setSecretDraft(event.target.value),
+              }),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: qqBusy !== '', onClick: connectQq }, qqBusy === 'save' ? '连接中…' : '保存并连接'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: qqBusy !== '', onClick: disconnectQq }, qqBusy === 'stop' ? '断开中…' : '断开'),
+            ),
+            qqStatus && qqStatus.botName ? h('p', { className: 'cm-hint' }, '机器人：' + qqStatus.botName) : null,
+            qqStatus && qqStatus.lastError ? h('p', { className: 'cm-hint' }, '最近错误：' + qqStatus.lastError) : null,
+            qqNotice ? h('p', { className: 'cm-hint' }, qqNotice) : null,
+            h(
+              'p',
+              { className: 'cm-hint' },
+              '跳转：',
+              h('a', { className: 'cm-int-link', href: 'https://q.qq.com/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ AI 开放平台 ↗'),
+              ' · ',
+              h('a', { className: 'cm-int-link', href: 'https://bot.q.qq.com/wiki/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ 机器人文档 ↗'),
+            ),
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '最近收到的 QQ 消息'),
+              h('span', { className: 'cm-muted' }, qqMessages.length + ' 条'),
+            ),
+            qqMessages.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有收到消息。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  qqMessages.map((message) =>
+                    h(
+                      'li',
+                      { key: message.id, className: 'cm-qq-member' },
+                      h('span', { className: 'cm-qq-name' }, String(message.senderName || message.senderId || '?').slice(0, 14)),
+                      h('span', { className: 'cm-muted' }, message.scope === 'group' ? '群' : '私聊'),
+                      h('span', { className: 'cm-person-memory-text' }, String(message.content || '').slice(0, 80)),
+                      h(
+                        'button',
+                        { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => recallMessage(message) },
+                        '撤回',
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '声纹（本地识别）'),
+              h('span', { className: 'cm-badge' }, vpInfo && vpInfo.enabled ? '开' : '关'),
+            ),
+            h('p', { className: 'cm-hint' }, '本地 CAM++：QQ 语音先比声纹再转文字。前 N 秒无门槛收录，之后按相似度门槛收；满时长后门槛自动提高。样本可以单条删除。'),
+            vpInfo
+              ? h(
+                  'p',
+                  { className: 'cm-hint' },
+                  (vpInfo.profiles || []).length === 0
+                    ? '还没有声纹档案。'
+                    : (vpInfo.profiles || []).map((item) => '「' + item.name + '」已有 ' + item.samples + ' 条样本，共 ' + item.seconds + ' 秒 / 上限 ' + vpInfo.maxSeconds + ' 秒').join('；'),
+                )
+              : null,
+            h(
+              'div',
+              { className: 'cm-qq-form', style: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '6px' } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h('input', { className: 'cm-input', style: { flex: '0 0 120px' }, type: 'number', min: '0', max: '600', value: vpDraft.freeEnrollSeconds, onChange: (event) => setVpDraft({ ...vpDraft, freeEnrollSeconds: event.target.value }) }),
+                h('span', { className: 'cm-hint' }, '无门槛收录时长（秒）：这之内你说一句收一句，不卡相似度'),
+              ),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h('input', { className: 'cm-input', style: { flex: '0 0 120px' }, type: 'number', min: '0.3', max: '0.99', step: '0.01', value: vpDraft.autoCollectAbove, onChange: (event) => setVpDraft({ ...vpDraft, autoCollectAbove: event.target.value }) }),
+                h('span', { className: 'cm-hint' }, '常规收录门槛（相似度）：过了无门槛期后，高于这个分才自动收录'),
+              ),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h('input', { className: 'cm-input', style: { flex: '0 0 120px' }, type: 'number', min: '0.3', max: '0.99', step: '0.01', value: vpDraft.autoCollectAboveWhenFull, onChange: (event) => setVpDraft({ ...vpDraft, autoCollectAboveWhenFull: event.target.value }) }),
+                h('span', { className: 'cm-hint' }, '满额门槛（相似度）：存满时长上限后，要更高分才继续收'),
+              ),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h('input', { className: 'cm-input', style: { flex: '0 0 120px' }, type: 'number', min: '0.3', max: '0.99', step: '0.01', value: vpDraft.threshold, onChange: (event) => setVpDraft({ ...vpDraft, threshold: event.target.value }) }),
+                h('span', { className: 'cm-hint' }, '认人阈值（相似度）：低于这个分就标「不像你」，只影响提示，不影响收录'),
+              ),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h('input', { className: 'cm-input', style: { flex: '0 0 120px' }, type: 'number', min: '10', max: '3600', value: vpDraft.maxSeconds, onChange: (event) => setVpDraft({ ...vpDraft, maxSeconds: event.target.value }) }),
+                h('span', { className: 'cm-hint' }, '时长上限（秒）：每个人最多存这么多秒；超了先从最老样本剪'),
+              ),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: vpBusy, onClick: saveVoiceprint }, vpBusy ? '保存中…' : '保存声纹设置'),
+            ),
+            h(
+              'details',
+              { className: 'cm-app-card', style: { marginTop: '6px' } },
+              h('summary', { style: { cursor: 'pointer', fontSize: '13px' } }, '群聊里认谁的声音（点开勾选）'),
+              h('p', { className: 'cm-hint' }, '群语音只有勾选的人才会做声纹识别/收录；不勾就完全不处理群里的语音，避免把别人的声音录进档案。'),
+              vpMembers.length === 0
+                ? h('p', { className: 'cm-muted' }, '还没有 QQ 人物档案，等群里有消息进来后会自动出现。')
+                : h(
+                    'ul',
+                    { className: 'cm-qq-members' },
+                    vpMembers.map((member) =>
+                      h(
+                        'li',
+                        { key: member.externalId, className: 'cm-qq-member' },
+                        h(
+                          'label',
+                          { style: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' } },
+                          h('input', { type: 'checkbox', checked: vpMemberDraft.includes(member.externalId), onChange: () => toggleVpMember(member.externalId) }),
+                          h('span', null, (member.name || '未命名') + '（' + String(member.externalId).slice(0, 8) + '…）'),
+                        ),
+                        h('span', { className: 'cm-muted' }, '消息 ' + member.msgCount),
+                      ),
+                    ),
+                  ),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: saveVpMembers }, '保存勾选（' + vpMemberDraft.length + ' 人）'),
+              vpMemberNotice ? h('p', { className: 'cm-hint' }, vpMemberNotice) : null,
+            ),
+            vpNotice ? h('p', { className: 'cm-hint' }, vpNotice) : null,
+            vpSamples.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有声纹样本，发几条语音就会自动收录。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  vpSamples.flatMap((entry) =>
+                    entry.samples.map((sample) =>
+                      h(
+                        'li',
+                        { key: entry.name + ':' + sample.index, className: 'cm-qq-member' },
+                        h('span', { className: 'cm-qq-name' }, entry.name),
+                        h('span', { className: 'cm-muted' }, '样本 #' + (sample.index + 1) + ' ｜ 时长 ' + sample.seconds + ' 秒' + (sample.at ? ' ｜ 收录于 ' + new Date(sample.at).toLocaleString() : '')),
+                        h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => deleteVoiceSample(entry.name, sample.index) }, '删除'),
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h('div', { className: 'cm-app-card-head' }, h('h3', null, '群发'), h('span', { className: 'cm-muted' }, '串行发送 · 间隔 1.5s · 单次最多 50 个')),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('input', { className: 'cm-input', type: 'text', placeholder: '目标 openid（多个用逗号/换行）', value: broadcastDraft.targetIds, onChange: (event) => setBroadcastDraft({ ...broadcastDraft, targetIds: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '要发的内容', value: broadcastDraft.content, onChange: (event) => setBroadcastDraft({ ...broadcastDraft, content: event.target.value }) }),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: broadcastBusy, onClick: runBroadcast }, broadcastBusy ? '发送中…' : '开始群发'),
+            ),
+            broadcastNotice ? h('p', { className: 'cm-hint' }, broadcastNotice) : null,
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h('div', { className: 'cm-app-card-head' }, h('h3', null, '群管理'), h('span', { className: 'cm-muted' }, '官方接口 · 需要机器人是群管理员')),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('input', { className: 'cm-input', type: 'text', placeholder: '群 openid', value: groupDraft.groupId, onChange: (event) => setGroupDraft({ ...groupDraft, groupId: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '成员 openid（多个用逗号）', value: groupDraft.memberId, onChange: (event) => setGroupDraft({ ...groupDraft, memberId: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '禁言分钟', value: groupDraft.minutes, onChange: (event) => setGroupDraft({ ...groupDraft, minutes: event.target.value }) }),
+            ),
+            h(
+              'div',
+              { className: 'cm-actions' },
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('info') }, '查群信息'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('mute') }, '禁言'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('unmute') }, '解除禁言'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('kick') }, '踢人'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('requests') }, '查入群申请'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('approve') }, '通过申请'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => groupAction('decline') }, '拒绝申请'),
+            ),
+            groupNotice ? h('p', { className: 'cm-hint' }, groupNotice) : null,
+            joinRequests.length === 0
+              ? null
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  joinRequests.map((item, index) =>
+                    h(
+                      'li',
+                      { key: (item.member_openid || '') + index, className: 'cm-qq-member' },
+                      h('span', { className: 'cm-qq-name' }, String(item.member_openid || '').slice(0, 12) + '…'),
+                      h('span', { className: 'cm-muted' }, String(item.apply_at || item.join_request_id || '').slice(0, 20)),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '表情包库'),
+              h(
+                'div',
+                { className: 'cm-actions' },
+                h('span', { className: 'cm-muted' }, stickers.length + ' 张 · 收到图自动入库'),
+                h(
+                  'button',
+                  { className: 'cm-btn cm-btn-small', type: 'button', onClick: toggleAutoSticker },
+                  '自动丢表情包：' + (qqConfig && qqConfig.autoSticker && qqConfig.autoSticker.enabled ? '开' : '关'),
+                ),
+              ),
+            ),
+            stickers.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有收到过图片表情。QQ 里有人发图，会自动收进来。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  stickers.slice(0, 24).map((sticker) =>
+                    h(
+                      'li',
+                      { key: sticker.id, className: 'cm-qq-member' },
+                      h('span', { className: 'cm-qq-name' }, sticker.file.slice(0, 22)),
+                      h('span', { className: 'cm-muted' }, Math.round((Number(sticker.bytes) || 0) / 1024) + ' KB · ' + (sticker.from || '未知来源')),
+                      h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => sendSticker(sticker.id) }, '发一张'),
+                      h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: async () => { try { const tagged = await apiPost('/qq/sticker/tag', { stickerId: sticker.id }); setScheduleNotice('已打标：' + ((tagged.tags || []).join('、') || tagged.caption || '无结果')) } catch (error) { setScheduleNotice('打标失败：' + error.message) } await loadQq() } }, '打标'),
+                      h(
+                        'button',
+                        { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: stickerBusy === sticker.id, onClick: () => deleteSticker(sticker.id) },
+                        stickerBusy === sticker.id ? '…' : '删除',
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '定时消息'),
+              h('span', { className: 'cm-muted' }, schedules.length + ' 条 · 每天按点发'),
+            ),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('input', { className: 'cm-input', type: 'text', placeholder: '09:30', value: scheduleDraft.time, onChange: (event) => setScheduleDraft({ ...scheduleDraft, time: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '到点要发的内容', value: scheduleDraft.content, onChange: (event) => setScheduleDraft({ ...scheduleDraft, content: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '发给谁（群/人 openid，留空=最近聊天的会话）', value: scheduleDraft.targetId, onChange: (event) => setScheduleDraft({ ...scheduleDraft, targetId: event.target.value }) }),
+              h('input', { className: 'cm-input', type: 'text', placeholder: '星期几（1-7，逗号分隔，空=每天）', value: scheduleDraft.weekdays, onChange: (event) => setScheduleDraft({ ...scheduleDraft, weekdays: event.target.value }) }),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', onClick: addSchedule }, '添加'),
+            ),
+            scheduleNotice ? h('p', { className: 'cm-hint' }, scheduleNotice) : null,
+            schedules.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有定时消息。')
+              : h(
+                  'ul',
+                  { className: 'cm-qq-members' },
+                  schedules.map((item) =>
+                    h(
+                      'li',
+                      { key: item.id, className: 'cm-qq-member' },
+                      h('span', { className: 'cm-qq-name' }, item.time),
+                      h('span', { className: 'cm-person-memory-text' }, String(item.content || '').slice(0, 60)),
+                      h('span', { className: 'cm-muted' }, (item.scope === 'group' ? '群 ' : '私聊 ') + String(item.targetId || '').slice(0, 10)),
+                      h(
+                        'button',
+                        { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => deleteSchedule(item.id) },
+                        '删除',
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card cm-app-credits' },
+            h('h3', null, '声明 / 参考'),
+            h('p', { className: 'cm-hint' }, '参考项目：dsh-qqbot（作者 zaofan，MIT 许可）· https://github.com/zaofan/dsh-qqbot'),
+            h('p', { className: 'cm-hint' }, '本应用是 AI记忆 自带实现：界面与交互参考上述项目，群成员识别 / 好感度 / 记忆已替换为 AI记忆 自己的实现；安装本插件即可使用，不需要另装 dsh-qqbot。'),
+          ),
+        ),
+      )
+    }
+
+    /** 打开内置应用：目前只有 qqbot 一个。 */
+    function BuiltinAppView(props) {
+      const { appId, onBack } = props
+      if (appId === 'qqbot') return h(QqbotBuiltinApp, { onBack })
+      return h(
+        'div',
+        { className: 'cm-app' },
+        h('div', { className: 'cm-app-head' }, h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'), h('div', { className: 'cm-app-title' }, h('h2', null, '自带应用'))),
+        h('div', { className: 'cm-app-body' }, h('p', { className: 'cm-muted' }, '这个自带应用还没有界面。')),
+      )
+    }
+
+    function IntegrationCard(props) {
+      const item = props.item
+      const homepage = integrationHomepage(item)
+      return h(
+        'article',
+        { className: 'cm-int-card' },
+        h(
+          'div',
+          { className: 'cm-int-card-head' },
+          h('h3', { className: 'cm-int-card-name' }, item.name),
+          h(
+            'span',
+            { className: 'cm-int-card-ver' },
+            (item.builtin ? '自带 · ' : '') + (item.version ? 'v' + item.version : ''),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'cm-int-tags' },
+          item.category ? h('span', { className: 'cm-int-tag cm-int-tag-strong' }, item.category) : null,
+          (Array.isArray(item.tags) ? item.tags : []).map((tag) =>
+            h('span', { key: 'tag-' + tag, className: 'cm-int-tag' }, tag),
+          ),
+        ),
+        h('p', { className: 'cm-int-card-desc' }, item.description || '这份清单还没写说明。'),
+        item.hint ? h('p', { className: 'cm-hint cm-hint-tight' }, item.hint) : null,
+        h(
+          'div',
+          { className: 'cm-int-card-foot' },
+          h('span', { className: 'cm-muted' }, item.author ? '作者 ' + item.author : ''),
+          item.openable
+            ? h(
+                'button',
+                { className: 'cm-btn cm-btn-small cm-btn-primary cm-int-open', type: 'button', onClick: () => props.onOpen && props.onOpen(item.app) },
+                '打开',
+              )
+            : null,
+          homepage
+            ? h(
+                'a',
+                { className: 'cm-int-link', href: homepage, target: '_blank', rel: 'noreferrer noopener' },
+                '主页 ↗',
+              )
+            : null,
+        ),
+      )
+    }
+
+    /** 「接入软件」页：搜索 + 清单卡片 + 怎么接入。 */
+    function IntegrationTab(props) {
+      const notify = props && typeof props.notify === 'function' ? props.notify : () => {}
+      const [query, setQuery] = useState('')
+      const [payload, setPayload] = useState(null)
+      const [error, setError] = useState('')
+      const [busy, setBusy] = useState(false)
+      const [guideOpen, setGuideOpen] = useState(false)
+      // 点开「自带应用」后整页切到应用界面（不离开面板）
+      const [openApp, setOpenApp] = useState('')
+
+      const load = useCallback(async () => {
+        setBusy(true)
+        try {
+          const response = await fetch(API_BASE + '/integrations', {
+            headers: { accept: 'application/json' },
+            credentials: 'same-origin',
+          })
+          setPayload(await unwrap(response))
+          setError('')
+        } catch (caught) {
+          const message = String(caught && caught.message ? caught.message : caught)
+          setError(
+            /unknown route|HTTP 404/i.test(message)
+              ? '清单接口还没生效——重载一次 AI记忆 插件（或重启 DSH）后就能读到目录。'
+              : message,
+          )
+        } finally {
+          setBusy(false)
+        }
+      }, [])
+
+      useEffect(() => {
+        load()
+      }, [load])
+
+      const makeExample = useCallback(async () => {
+        setBusy(true)
+        try {
+          const created = await apiPost('/integrations/example', {})
+          await load()
+          notify('已生成示例清单：' + ((created && created.file) || 'example.json'))
+        } catch (caught) {
+          notify('生成示例失败：' + caught.message, true)
+        } finally {
+          setBusy(false)
+        }
+      }, [load, notify])
+
+      const items = payload && Array.isArray(payload.items) ? payload.items : []
+      // 本应用自带的接入（内置清单，不需要 integrations 目录）
+      const builtinItems = payload && Array.isArray(payload.builtin) ? payload.builtin : []
+      const dir = payload && typeof payload.dir === 'string' ? payload.dir : ''
+      const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+      const match = (item) => {
+        if (tokens.length === 0) return true
+        const haystack = integrationHaystack(item)
+        return tokens.every((token) => haystack.includes(token))
+      }
+      const filteredBuiltin = builtinItems.filter(match)
+      const filtered = items.filter(match)
+
+      const metaText =
+        tokens.length > 0
+          ? '自带 ' + filteredBuiltin.length + ' 个 · 外部 ' + filtered.length + ' 个（共匹配 ' + (filteredBuiltin.length + filtered.length) + ' 个）'
+          : '自带 ' + builtinItems.length + ' 个 · 外部已接入 ' + items.length + ' 个'
+
+      if (openApp !== '') {
+        return h(BuiltinAppView, { appId: openApp, onBack: () => setOpenApp('') })
+      }
+
+      return h(
+        'div',
+        { className: 'cm-tab-body' },
+        h(
+          'div',
+          { className: 'cm-int-topline' },
+          h('span', { className: 'cm-int-topline-hint' }, '想让自己的软件也出现在这里？'),
+          h(
+            'a',
+            {
+              className: 'cm-int-submit',
+              href: INTEGRATION_SUBMIT_URL,
+              target: '_blank',
+              rel: 'noreferrer noopener',
+            },
+            '申请收录软件 ↗',
+          ),
+        ),
+        h(
+          'div',
+          { className: 'cm-int-toolbar' },
+          h(
+            'div',
+            { className: 'cm-search-field' },
+            h('span', { className: 'cm-search-icon' }, '🔍'),
+            h('input', {
+              className: 'cm-search-input',
+              type: 'text',
+              value: query,
+              placeholder: '搜索软件、通道或能力，例如：QQ、记忆…',
+              onChange: (event) => setQuery(event.target.value),
+            }),
+            query !== ''
+              ? h(
+                  'button',
+                  { className: 'cm-search-clear', type: 'button', title: '清除搜索', onClick: () => setQuery('') },
+                  '×',
+                )
+              : null,
+          ),
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy, onClick: load }, busy ? '刷新中…' : '刷新'),
+        ),
+        h('p', { className: 'cm-int-meta' }, metaText),
+        error ? h('div', { className: 'cm-banner cm-banner-error' }, '读取清单失败：' + error) : null,
+        filteredBuiltin.length > 0
+          ? h(
+              'div',
+              { className: 'cm-int-section' },
+              h(
+                'div',
+                { className: 'cm-int-section-head' },
+                h('h3', null, '本应用自带'),
+                h('span', { className: 'cm-muted' }, '跟着插件走，不用安装、不用放清单'),
+              ),
+              h(
+                'div',
+                { className: 'cm-int-grid' },
+                filteredBuiltin.map((item) => h(IntegrationCard, { key: item.id, item, onOpen: setOpenApp })),
+              ),
+            )
+          : null,
+        filtered.length > 0
+          ? h(
+              'div',
+              { className: 'cm-int-section' },
+              h(
+                'div',
+                { className: 'cm-int-section-head' },
+                h('h3', null, '外部软件'),
+                h('span', { className: 'cm-muted' }, '放在 integrations 目录里的清单'),
+              ),
+              h(
+                'div',
+                { className: 'cm-int-grid' },
+                filtered.map((item) => h(IntegrationCard, { key: item.id, item })),
+              ),
+            )
+          : null,
+        filteredBuiltin.length + filtered.length === 0
+          ? h(
+              'div',
+              { className: 'cm-empty cm-int-empty' },
+              h(
+                'div',
+                { className: 'cm-int-empty-title' },
+                tokens.length > 0 ? '没有找到「' + query.trim() + '」' : '还没有接入外部软件',
+              ),
+              h(
+                'p',
+                null,
+                tokens.length > 0
+                  ? '换个关键词试试，或者清空搜索看全部。'
+                  : '自带接入是跟着插件走的；外部软件把一个清单 JSON 放进下面这个目录，点「刷新」就会出现在这里。',
+              ),
+              dir ? h('code', { className: 'cm-int-path' }, dir) : null,
+              tokens.length === 0
+                ? h(
+                    'div',
+                    { className: 'cm-int-empty-actions' },
+                    h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy, onClick: makeExample }, '生成示例清单'),
+                  )
+                : null,
+            )
+          : null,
+        h(
+          'section',
+          { className: 'cm-int-guide' },
+          h(
+            'button',
+            { className: 'cm-int-guide-toggle', type: 'button', onClick: () => setGuideOpen((open) => !open) },
+            (guideOpen ? '▾' : '▸') + ' 怎么把一个软件接进来？',
+          ),
+          guideOpen
+            ? h(
+                'div',
+                { className: 'cm-int-guide-body' },
+                h(
+                  'ol',
+                  null,
+                  h('li', null, '在上面那个目录里新建一个 <id>.json 清单（也可以点「生成示例清单」照着改）。'),
+                  h('li', null, '至少写 id 和 name；description / version / author / category / tags / homepage 都是可选的，写得越清楚，搜索越好找。'),
+                  h('li', null, '回面板点「刷新」，卡片就出现在上面了。'),
+                ),
+                h(
+                  'p',
+                  null,
+                  '清单只是一份描述，不会执行任何代码。真要让软件动起来（比如 QQ 消息进 AI记忆），由那个软件自己提供桥接或独立插件；这个页只负责把它们列出来、告诉别人有哪些能接。',
+                ),
+                h('pre', { className: 'cm-pre' }, JSON.stringify(SAMPLE_INTEGRATION, null, 2)),
+              )
+            : null,
+        ),
+      )
+    }
     // ── panel ──────────────────────────────────────────────────────────────
 
     const TABS = [
@@ -2825,6 +4286,7 @@ window.__ModuleLoader__.load({
       { id: 'backup', label: '备份' },
       { id: 'status', label: '状态' },
       { id: 'overview', label: '总览' },
+      { id: 'integration', label: '接入软件' },
     ]
 
     /** 保存 client 侧 ctx，用来调用宿主的 uiWorkspace.openSession 把新对话直接打开。 */
@@ -3171,7 +4633,10 @@ window.__ModuleLoader__.load({
       const enabled = Boolean(snapshot && snapshot.enabled === true)
 
       let body = h('div', { className: 'cm-empty' }, '加载中…')
-      if (error && !snapshot) {
+      // 「接入软件」页：内容先留空，且不依赖本对话是否开启记忆。
+      if (tab === 'integration') {
+        body = h(IntegrationTab, { notify })
+      } else if (error && !snapshot) {
         body = h('div', { className: 'cm-empty' }, `无法连接 Host：${error}`)
       } else if (!enabled) {
         body = h(
@@ -3210,24 +4675,23 @@ window.__ModuleLoader__.load({
             h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: refresh }, '刷新'),
           ),
           enabled && snapshot ? h(StatusBar, { snapshot }) : null,
-          enabled
-            ? h(
-                'div',
-                { className: 'cm-tabs' },
-                TABS.map((item) =>
-                  h(
-                    'button',
-                    {
-                      key: item.id,
-                      type: 'button',
-                      className: `cm-tab${tab === item.id ? ' cm-tab-active' : ''}`,
-                      onClick: () => setTab(item.id),
-                    },
-                    item.label,
-                  ),
-                ),
-              )
-            : null,
+          // 页签条常驻：本对话没开启记忆时也能点「接入软件」。
+          h(
+            'div',
+            { className: 'cm-tabs' },
+            TABS.map((item) =>
+              h(
+                'button',
+                {
+                  key: item.id,
+                  type: 'button',
+                  className: `cm-tab${tab === item.id ? ' cm-tab-active' : ''}`,
+                  onClick: () => setTab(item.id),
+                },
+                item.label,
+              ),
+            ),
+          ),
         ),
         h(
           'div',

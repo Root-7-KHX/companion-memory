@@ -5,3 +5,8 @@ screenshots/
 *.log
 .DS_Store
 Thumbs.db
+
+# 本地可选依赖（声纹引擎与模型体积大，不随仓库/发布包分发）
+vendor/
+models/
+tmp-stt-test/
