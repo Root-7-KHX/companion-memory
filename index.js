@@ -41,7 +41,20 @@ export function apply(ctx, config) {
   ctx.effect(() => registerHierarchy(ctx, manager), 'companion-memory: hierarchy memory compression')
   ctx.effect(() => registerWebApi(ctx, manager), 'companion-memory: /companion/api routes')
   ctx.effect(() => installBridgeEndpoint(ctx, manager), 'companion-memory: bridge endpoint file')
-  // 自带的 QQ 连接：插件卸载时断开（不会自动连，防止和正在运行的 dsh-qqbot 抢同一个 bot）
+  // 自带的 QQ 连接：面板里的总开关打开时，插件加载后自动连；关着就什么都不做。
+  // 手动「断开」会把开关一起关掉，所以不会和正在运行的 dsh-qqbot 抢同一个 bot。
+  ctx.effect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const qq = manager.qq()
+        const cfg = qq.publicConfig()
+        if (cfg.enabled === true && cfg.appId !== '' && cfg.hasSecret) qq.start().catch(() => {})
+      } catch {
+        // 自动连失败不影响插件其它部分
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, 'companion-memory: qq bot autostart')
   ctx.effect(() => () => { try { manager.qq().stop() } catch { /* ignore */ } }, 'companion-memory: qq bot cleanup')
   ctx.effect(() => {
     const bridge = manager.bridge()

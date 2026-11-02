@@ -28,6 +28,23 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 统一的开关滑条：复用 .cm-switch 样式，点一下切换；light=true 用于深色标题栏。 */
+    function SliderSwitch(props) {
+      const { checked, label, title, disabled, onChange, light } = props
+      return h(
+        'label',
+        { className: 'cm-switch', title: title || '', style: light ? { color: '#fff' } : undefined },
+        h('input', {
+          type: 'checkbox',
+          checked: !!checked,
+          disabled: !!disabled,
+          onChange: (event) => onChange && onChange(event.target.checked),
+        }),
+        h('span', { className: 'cm-switch-slider' }),
+        h('span', { className: 'cm-switch-text' }, label || ''),
+      )
+    }
+
     const PLUGIN_ID = 'companion-memory'
     const API_BASE = '/companion/api'
     const POLL_MS = 5000
@@ -120,6 +137,8 @@ window.__ModuleLoader__.load({
 .cm-app-card h3 { margin: 0; font-size: 13.5px; }
 .cm-qq-members { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cm-qq-member { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.cm-qq-del { padding: 1px 7px; line-height: 1.2; font-size: 14px; }
+.cm-qq-del:hover { color: var(--cm-danger, #d92d20); border-color: var(--cm-danger, #d92d20); }
 .cm-qq-name { font-weight: 600; }
 .cm-qq-id { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #1e6fff; }
 .cm-qq-plan { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.8; }
@@ -3177,6 +3196,9 @@ window.__ModuleLoader__.load({
       const [bridge, setBridge] = useState(null)
       const [bridgeDraft, setBridgeDraft] = useState('')
       const [bridgeNotice, setBridgeNotice] = useState('')
+      // 「我的账号（用户）」：绑定一个 QQ 账号当用户，其他人的私聊各自单独一个说话人
+      const [ownerSaving, setOwnerSaving] = useState(false)
+      const [ownerNotice, setOwnerNotice] = useState('')
       const [qqSessions, setQqSessions] = useState([])
       const [qqSessionGroups, setQqSessionGroups] = useState([])
       const [bridgePickerOpen, setBridgePickerOpen] = useState(false)
@@ -3184,6 +3206,10 @@ window.__ModuleLoader__.load({
       const [qqPeers, setQqPeers] = useState([])
       const [allowedPeers, setAllowedPeers] = useState([])
       const [allowedDirty, setAllowedDirty] = useState(false)
+      const [imageTtlDraft, setImageTtlDraft] = useState('')
+      const [stickerDir, setStickerDir] = useState('')
+      const [stickerDirDraft, setStickerDirDraft] = useState('')
+      const [stickerUploadBusy, setStickerUploadBusy] = useState(false)
       const [vpSamples, setVpSamples] = useState([])
       const [vpDraft, setVpDraft] = useState({ freeEnrollSeconds: 60, autoCollectAbove: 0.7, autoCollectAboveWhenFull: 0.8, threshold: 0.55, maxSeconds: 300 })
       const [vpNotice, setVpNotice] = useState('')
@@ -3199,29 +3225,55 @@ window.__ModuleLoader__.load({
       const [routeNotice, setRouteNotice] = useState('')
       const [routeWorkspaces, setRouteWorkspaces] = useState([])
       const [routePickerOpen, setRoutePickerOpen] = useState('')
+      // 「AI 主动冒泡」：AI 可以自己约任意长的时间（几分钟、几小时、几天都行），到点醒来现场想内容再发；TA 一说话旧时间作废
+      const [proactive, setProactive] = useState(null)
+      const [proactiveNotice, setProactiveNotice] = useState('')
+      const [proactiveQuiet, setProactiveQuiet] = useState({ start: '23:00', end: '08:00' })
+      const [proactiveLimits, setProactiveLimits] = useState({ dailyLimit: '8', maxPending: '3' })
+      const [proactiveBusy, setProactiveBusy] = useState(false)
+      // 静默时段输入框正在编辑时，别让 5 秒一次的轮询快照把用户正在输入的值覆盖掉
+      const proactiveQuietEditing = useRef(false)
+      const proactiveLimitsEditing = useRef(false)
 
       const loadQq = useCallback(async () => {
         try {
           const get = (path) => fetch(API_BASE + path, { headers: { accept: 'application/json' }, credentials: 'same-origin' }).then(unwrap)
-          const [status, config, messages, stickerList, scheduleList, bridgeInfo, sessionList, peerInfo] = await Promise.all([
+          const [status, config, messages, stickerList, stickerDirInfo, scheduleList, bridgeInfo, sessionList, peerInfo, proactiveInfo] = await Promise.all([
             get('/qq/status'),
             get('/qq/config'),
             get('/qq/messages?limit=10'),
             get('/qq/stickers?limit=60'),
+            get('/qq/stickers/dir'),
             get('/qq/schedule'),
             get('/qq/bridge'),
             get('/qq/bridge/sessions'),
             get('/qq/peers'),
+            get('/qq/proactive'),
           ])
           setBridge(bridgeInfo)
           setQqSessions(Array.isArray(sessionList && sessionList.items) ? sessionList.items : [])
           setQqSessionGroups(Array.isArray(sessionList && sessionList.groups) ? sessionList.groups : [])
           setQqPeers(Array.isArray(peerInfo && peerInfo.items) ? peerInfo.items : [])
           setAllowedPeers(Array.isArray(peerInfo && peerInfo.allowedPeers) ? peerInfo.allowedPeers : [])
+          const proactiveSnapshot = proactiveInfo && typeof proactiveInfo === 'object' ? proactiveInfo : null
+          setProactive(proactiveSnapshot)
+          if (!proactiveQuietEditing.current) {
+            const quietSource = (proactiveSnapshot && proactiveSnapshot.config) || proactiveSnapshot || {}
+            const quietStart = String(quietSource.quietStart || '23:00')
+            const quietEnd = String(quietSource.quietEnd || '08:00')
+            setProactiveQuiet((prev) => (prev.start === quietStart && prev.end === quietEnd ? prev : { start: quietStart, end: quietEnd }))
+          }
+          if (!proactiveLimitsEditing.current) {
+            const limitSource = (proactiveSnapshot && proactiveSnapshot.config) || proactiveSnapshot || {}
+            const dailyLimit = String(limitSource.dailyLimit ?? 8)
+            const maxPending = String(limitSource.maxPending ?? 3)
+            setProactiveLimits((prev) => (prev.dailyLimit === dailyLimit && prev.maxPending === maxPending ? prev : { dailyLimit, maxPending }))
+          }
           setQqStatus(status)
           setQqConfig(config)
           setQqMessages(Array.isArray(messages) ? messages : [])
           setStickers(Array.isArray(stickerList) ? stickerList : [])
+          setStickerDir((stickerDirInfo && stickerDirInfo.dir) || '')
           setSchedules(Array.isArray(scheduleList) ? scheduleList : [])
           try {
             const sampleList = await get('/qq/voiceprint/samples')
@@ -3268,6 +3320,10 @@ window.__ModuleLoader__.load({
       }, [])
 
       useEffect(() => {
+        setStickerDirDraft((prev) => (prev === '' ? stickerDir || '' : prev))
+      }, [stickerDir])
+
+      useEffect(() => {
         loadQq()
         const timer = setInterval(loadQq, 5000)
         return () => clearInterval(timer)
@@ -3301,6 +3357,25 @@ window.__ModuleLoader__.load({
           setQqBusy('')
         }
       }, [])
+
+      const toggleQq = useCallback(async (enabled) => {
+        setQqBusy('toggle')
+        try {
+          const next = await apiPost('/qq/enabled', { enabled })
+          setQqStatus(next)
+          setQqNotice(
+            enabled
+              ? '已开启 QQ 接入' + (next && next.connected ? '（已连接）' : '（正在连接…）')
+              : '已关闭 QQ 接入：已断开，之后不再接收和发送 QQ 消息',
+          )
+          await loadQq()
+        } catch (error) {
+          setQqNotice('切换失败：' + error.message)
+          await loadQq()
+        } finally {
+          setQqBusy('')
+        }
+      }, [loadQq])
 
       const groupAction = useCallback(async (kind) => {
         setGroupNotice('')
@@ -3350,6 +3425,107 @@ window.__ModuleLoader__.load({
         }
       }, [loadQq])
 
+      const openStickerDir = useCallback(async () => {
+        try {
+          const dir = stickerDirDraft !== '' ? stickerDirDraft : stickerDir
+          const opened = await apiPost('/qq/sticker/opendir', { dir })
+          setScheduleNotice('已打开文件夹：' + ((opened && opened.dir) || dir))
+        } catch (error) {
+          setScheduleNotice('打开文件夹失败：' + error.message + '（路径：' + (stickerDirDraft || stickerDir) + '）')
+        }
+      }, [stickerDirDraft, stickerDir])
+
+      const pickStickerDir = useCallback(async () => {
+        try {
+          const picked = await apiPost('/qq/sticker/pickdir', { dir: stickerDirDraft !== '' ? stickerDirDraft : stickerDir })
+          const dir = picked && typeof picked.dir === 'string' ? picked.dir : ''
+          if (dir === '') { setScheduleNotice('没有选择文件夹（对话框取消了）'); return }
+          await apiPost('/qq/sticker/setdir', { dir })
+          setStickerDirDraft(dir)
+          setScheduleNotice('表情包文件夹已切换到：' + dir)
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('选择文件夹失败：' + error.message)
+        }
+      }, [stickerDirDraft, stickerDir, loadQq])
+
+      const resetStickerDir = useCallback(async () => {
+        try {
+          await apiPost('/qq/sticker/setdir', { dir: '' })
+          setStickerDirDraft('')
+          setScheduleNotice('已恢复默认文件夹（qq-stickers）')
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('恢复默认失败：' + error.message)
+        }
+      }, [loadQq])
+
+      const saveStickerDir = useCallback(async () => {
+        try {
+          await apiPost('/qq/sticker/setdir', { dir: stickerDirDraft })
+          setScheduleNotice('表情包文件夹已切换：' + (stickerDirDraft === '' ? '（默认 qq-stickers）' : stickerDirDraft))
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('保存路径失败：' + error.message)
+        }
+      }, [stickerDirDraft, loadQq])
+
+      const uploadFiles = useCallback(async (files) => {
+        const list = Array.from(files || [])
+        if (list.length === 0) return
+        setStickerUploadBusy(true)
+        let ok = 0
+        try {
+          for (const file of list) {
+            const data = await new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve(String(reader.result || '').split(',').pop() || '')
+              reader.onerror = () => reject(new Error('读取文件失败'))
+              reader.readAsDataURL(file)
+            })
+            if (data === '') continue
+            await apiPost('/qq/sticker/upload', { name: file.name, data })
+            ok += 1
+          }
+          setScheduleNotice('收进表情包库 ' + ok + ' 张')
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('上传失败：' + error.message)
+        } finally {
+          setStickerUploadBusy(false)
+        }
+      }, [loadQq])
+
+      const uploadStickers = useCallback((event) => {
+        const files = Array.from((event && event.target && event.target.files) || [])
+        if (event && event.target) event.target.value = ''
+        uploadFiles(files)
+      }, [uploadFiles])
+
+      const dropStickers = useCallback((event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const files = Array.from((event && event.dataTransfer && event.dataTransfer.files) || [])
+        if (files.length > 0) uploadFiles(files)
+      }, [uploadFiles])
+
+      const allowDrop = useCallback((event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }, [])
+
+      const saveImageTtl = useCallback(async () => {
+        const value = Number(imageTtlDraft !== '' ? imageTtlDraft : (qqConfig && qqConfig.imageTtlDays) || 3)
+        if (!Number.isFinite(value) || value < 1) { setScheduleNotice('保留天数要 ≥ 1'); return }
+        try {
+          await apiPost('/qq/config', { imageTtlDays: Math.round(value) })
+          setScheduleNotice('图片/表情包保留 ' + Math.round(value) + ' 天，过期自动清空')
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('保存失败：' + error.message)
+        }
+      }, [imageTtlDraft, qqConfig, loadQq])
+
       const addSchedule = useCallback(async () => {
         try {
           const weekdays = String(scheduleDraft.weekdays || '').split(/[,，\s]+/).map(Number).filter((n) => n >= 1 && n <= 7)
@@ -3372,6 +3548,20 @@ window.__ModuleLoader__.load({
           setBridgeNotice('保存失败：' + error.message)
         }
       }, [bridgeDraft, bridge, loadQq])
+
+      const saveOwner = useCallback(async (openId) => {
+        setOwnerSaving(true)
+        try {
+          const next = await apiPost('/qq/bridge/owner', { openId })
+          setBridge(next)
+          setOwnerNotice(openId === '' ? '已取消绑定：所有 QQ 人都按「用户」处理' : '已绑定：这个账号算「用户」，其他人各自单独一个说话人')
+          await loadQq()
+        } catch (error) {
+          setOwnerNotice('保存失败：' + error.message)
+        } finally {
+          setOwnerSaving(false)
+        }
+      }, [loadQq])
 
       const runBroadcast = useCallback(async () => {
         setBroadcastBusy(true)
@@ -3396,15 +3586,84 @@ window.__ModuleLoader__.load({
         }
       }, [loadQq])
 
-      const toggleAutoSticker = useCallback(async () => {
+      const saveStickerCaption = useCallback(async (stickerId, caption) => {
+        try {
+          await apiPost('/qq/sticker/caption', { stickerId, caption })
+          setScheduleNotice(caption.trim() === '' ? '已清空这张表情包的含义' : '含义已保存：' + caption.trim())
+          await loadQq()
+        } catch (error) {
+          setScheduleNotice('保存含义失败：' + error.message)
+        }
+      }, [loadQq])
+
+      const toggleAutoSticker = useCallback(async (target) => {
         const current = qqConfig && qqConfig.autoSticker ? qqConfig.autoSticker.enabled === true : false
         try {
-          await apiPost('/qq/autosticker', { enabled: !current })
+          await apiPost('/qq/autosticker', { enabled: typeof target === 'boolean' ? target : !current })
           await loadQq()
         } catch (error) {
           setScheduleNotice('切换失败：' + error.message)
         }
       }, [qqConfig, loadQq])
+
+      const toggleProactive = useCallback(async (target) => {
+        const enabled = typeof target === 'boolean' ? target : !(proactive && proactive.enabled)
+        setProactiveBusy(true)
+        setProactiveNotice('')
+        try {
+          await apiPost('/qq/proactive', { enabled })
+          setProactiveNotice(enabled ? '已开启：聊完后 AI 会自己约个时间冒个泡' : '已关闭：之后不再主动冒泡')
+          await loadQq()
+        } catch (error) {
+          setProactiveNotice('切换失败：' + error.message)
+        } finally {
+          setProactiveBusy(false)
+        }
+      }, [proactive, loadQq])
+
+      const saveProactiveQuiet = useCallback(async () => {
+        setProactiveBusy(true)
+        setProactiveNotice('')
+        try {
+          await apiPost('/qq/proactive', { quietStart: proactiveQuiet.start, quietEnd: proactiveQuiet.end })
+          setProactiveNotice('已保存静默时段')
+          await loadQq()
+        } catch (error) {
+          setProactiveNotice('保存静默时段失败：' + error.message)
+        } finally {
+          setProactiveBusy(false)
+        }
+      }, [proactiveQuiet, loadQq])
+
+      const saveProactiveLimits = useCallback(async () => {
+        setProactiveBusy(true)
+        setProactiveNotice('')
+        try {
+          await apiPost('/qq/proactive', {
+            dailyLimit: Number(proactiveLimits.dailyLimit) || 0,
+            maxPending: Number(proactiveLimits.maxPending) || 0,
+          })
+          setProactiveNotice('已保存次数上限（0 = 不限）')
+          await loadQq()
+        } catch (error) {
+          setProactiveNotice('保存次数上限失败：' + error.message)
+        } finally {
+          setProactiveBusy(false)
+        }
+      }, [proactiveLimits, loadQq])
+
+      const cancelProactive = useCallback(async (id) => {
+        setProactiveBusy(true)
+        setProactiveNotice('')
+        try {
+          await apiPost('/qq/proactive/cancel', { id })
+          await loadQq()
+        } catch (error) {
+          setProactiveNotice('取消冒泡失败：' + error.message)
+        } finally {
+          setProactiveBusy(false)
+        }
+      }, [loadQq])
 
       const deleteSchedule = useCallback(async (id) => {
         try {
@@ -3441,6 +3700,17 @@ window.__ModuleLoader__.load({
           await loadQq()
         } catch (caught) {
           setRouteNotice('改名失败：' + caught.message)
+        }
+      }, [loadQq])
+
+      const forgetPeerRoute = useCallback(async (key) => {
+        try {
+          const result = await apiPost('/qq/peers/delete', { key })
+          setRouteNotice(result && result.removed === true ? '已从列表删掉这条 QQ 聊天（不删记忆；它再发消息还会重新出现）' : '这条 QQ 聊天已经不在列表里了')
+          setRoutePickerOpen((open) => (open === key ? '' : open))
+          await loadQq()
+        } catch (caught) {
+          setRouteNotice('删除失败：' + caught.message)
         }
       }, [loadQq])
 
@@ -3507,6 +3777,30 @@ window.__ModuleLoader__.load({
 
       const items = people && Array.isArray(people.items) ? people.items : []
       const vpInfo = qqStatus && qqStatus.voiceprint
+      const proactivePending = proactive && Array.isArray(proactive.pending) ? proactive.pending : []
+      const proactiveRecent = proactive && Array.isArray(proactive.recent) ? proactive.recent : []
+      const proactivePeerName = (scope, peerId) => {
+        const peerList = Array.isArray(qqPeers) ? qqPeers : []
+        const id = String(peerId || '')
+        if (id === '') return ''
+        const sameId = (peer) => peer && String(peer.peerId || '') === id
+        const hit = peerList.find((peer) => sameId(peer) && (!scope || !peer.scope || peer.scope === scope)) || peerList.find(sameId)
+        return (hit && hit.name) || id.slice(0, 8)
+      }
+      const proactiveStatusLabel = (status) => ({ sent: '已发', skipped: '没发', failed: '失败', inflight: '进行中', empty: '没发' }[status] || String(status || '—'))
+      const proactiveDueLabel = (item) => {
+        const clock = item && item.dueClock ? String(item.dueClock) : '--:--'
+        const day = item && item.dueDay ? String(item.dueDay) : ''
+        if (day === '') return clock
+        const now = new Date()
+        const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')
+        if (day === today) return clock
+        return (day.slice(0, 4) === String(now.getFullYear()) ? day.slice(5) : day) + ' ' + clock
+      }
+      const clipProactiveText = (value, max) => {
+        const text = String(value || '').replace(/\s+/g, ' ').trim()
+        return text.length > max ? text.slice(0, max) + '…' : text
+      }
       return h(
         'div',
         { className: 'cm-app' },
@@ -3515,6 +3809,13 @@ window.__ModuleLoader__.load({
           { className: 'cm-app-head' },
           h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
           h('div', { className: 'cm-app-title' }, h('h2', null, 'QQ 机器人'), h('p', { className: 'cm-app-sub' }, '自带应用 · 不用安装 dsh-qqbot')),
+          h(
+            'label',
+            { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: 'QQ 接入总开关' },
+            h('input', { type: 'checkbox', checked: !!(qqStatus && qqStatus.enabled), disabled: qqBusy !== '', onChange: (event) => toggleQq(event.target.checked) }),
+            h('span', { className: 'cm-switch-slider' }),
+            h('span', { className: 'cm-switch-text', style: { color: '#fff' } }, qqStatus && qqStatus.enabled ? 'QQ 接入：开' : 'QQ 接入：关'),
+          ),
           h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy, onClick: load }, busy ? '刷新中…' : '刷新'),
         ),
         h(
@@ -3524,7 +3825,7 @@ window.__ModuleLoader__.load({
             'section',
             { className: 'cm-app-card' },
             h('div', { className: 'cm-app-card-head' }, h('h3', null, 'QQ 群聊/私聊 → 选 AI（每条独立）'), h('span', { className: 'cm-badge' }, bridge && bridge.enabled ? '接管中' : '已关'), h('span', { className: 'cm-muted' }, routes.length + ' 条')),
-            h('p', { className: 'cm-hint' }, '这里一行就是一个 QQ 群聊/私聊；右边下拉是给这个群单独选一个 AI 会话。群聊要等群里给机器人发过消息（@ 我一次）才会出现在列表里——QQ 官方没有“列出全部群”的接口，只能收到消息后反查群名。'),
+            h('p', { className: 'cm-hint' }, '这里一行就是一个 QQ 群聊/私聊；右边下拉是给这个群单独选一个 AI 会话。群聊要等群里给机器人发过消息（@ 我一次）才会出现在列表里——QQ 官方没有“列出全部群”的接口，只能收到消息后反查群名。行尾的 × 可以从列表里删掉（群解散了、不想看了都行）：只删这一行显示，不删记忆和它绑定的 AI 会话，它再发消息会自己回来。'),
             h(
               'div',
               { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '4px 0 6px' } },
@@ -3667,6 +3968,20 @@ window.__ModuleLoader__.load({
                           )
                         })(),
                         h('span', { className: 'cm-muted' }, '消息 ' + item.count),
+                        h(
+                          'button',
+                          {
+                            className: 'cm-btn cm-btn-small cm-btn-ghost cm-qq-del',
+                            type: 'button',
+                            title: '从列表删掉这个 QQ 聊天（不删记忆；它再发消息会重新出现）',
+                            onClick: () => {
+                              const label = item.name || (item.peerId ? (item.scope === 'group' ? '群 ' : '私聊 ') + String(item.peerId).slice(0, 8) + '…' : item.key)
+                              if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm('确定把「' + label + '」从列表里删掉吗？\n\n不删记忆，也不动它绑定的 AI 会话；它再发消息还会重新出现。')) return
+                              forgetPeerRoute(item.key)
+                            },
+                          },
+                          '×',
+                        ),
                       )
                     })(),
                   ),
@@ -3684,10 +3999,56 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'cm-switch-slider' }),
                 h('span', { className: 'cm-switch-text' }, bridge && bridge.enabled ? '接管中（点一下关闭）' : '已关闭（点一下开启）'),
               ),
-              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => saveBridge({ approvalEnabled: !(bridge && bridge.approvalEnabled) }) }, '审批卡片：' + (bridge && bridge.approvalEnabled ? '开' : '关')),
+              h(SliderSwitch, {
+                checked: !!(bridge && bridge.approvalEnabled),
+                label: '审批卡片：' + (bridge && bridge.approvalEnabled ? '开' : '关'),
+                title: '审批请求推成 QQ 卡片（点一下切换）',
+                onChange: (checked) => saveBridge({ approvalEnabled: checked }),
+              }),
             ),
             bridgeNotice ? h('p', { className: 'cm-hint' }, bridgeNotice) : null,
             bridge && bridge.lastPeer ? h('p', { className: 'cm-hint' }, '最近 QQ 会话：' + bridge.lastPeer.scope + ' · ' + String(bridge.lastPeer.peerId).slice(0, 12) + '… · 待审批 ' + bridge.pendingApprovals) : null,
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, '我的账号（用户）'),
+              h('span', { className: 'cm-muted' }, bridge && bridge.ownerOpenId ? '已绑定' : '未绑定（全部按用户处理）'),
+            ),
+            h(
+              'p',
+              { className: 'cm-hint' },
+              '选你自己的 QQ 账号：这个账号说话时算「用户」，沿用现在的好感度和记忆；其他人的私聊/群消息会各自单独成一个说话人，互不混在一起。',
+            ),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h(
+                'select',
+                {
+                  className: 'cm-input',
+                  style: { flex: '1 1 260px' },
+                  value: (bridge && bridge.ownerOpenId) || '',
+                  disabled: ownerSaving,
+                  onChange: (event) => saveOwner(event.target.value),
+                },
+                h('option', { value: '' }, '（不绑定：所有 QQ 人都算用户）'),
+                items.map((person) =>
+                  h(
+                    'option',
+                    { key: person.externalId, value: person.externalId },
+                    (person.currentName || '未命名') + '（' + String(person.externalId).slice(0, 10) + '…）',
+                  ),
+                ),
+                bridge && bridge.ownerOpenId && !items.some((person) => person.externalId === bridge.ownerOpenId)
+                  ? h('option', { value: bridge.ownerOpenId }, '当前绑定：' + String(bridge.ownerOpenId).slice(0, 12) + '…')
+                  : null,
+              ),
+            ),
+            ownerNotice ? h('p', { className: 'cm-hint' }, ownerNotice) : null,
           ),
           h(
             'section',
@@ -3795,7 +4156,13 @@ window.__ModuleLoader__.load({
                   { className: 'cm-hint' },
                   (vpInfo.profiles || []).length === 0
                     ? '还没有声纹档案。'
-                    : (vpInfo.profiles || []).map((item) => '「' + item.name + '」已有 ' + item.samples + ' 条样本，共 ' + item.seconds + ' 秒 / 上限 ' + vpInfo.maxSeconds + ' 秒').join('；'),
+                    : (vpInfo.profiles || [])
+                        .map(
+                          (item) =>
+                            '「' + item.name + '」已有 ' + item.samples + ' 条样本，共 ' + item.seconds + ' 秒 / 上限 ' + vpInfo.maxSeconds + ' 秒' +
+                            (item.timbre && item.timbre.summary ? '，音色：' + item.timbre.summary : ''),
+                        )
+                        .join('；'),
                 )
               : null,
             h(
@@ -3931,15 +4298,57 @@ window.__ModuleLoader__.load({
                 'div',
                 { className: 'cm-actions' },
                 h('span', { className: 'cm-muted' }, stickers.length + ' 张 · 收到图自动入库'),
+                h(SliderSwitch, {
+                  checked: !!(qqConfig && qqConfig.autoSticker && qqConfig.autoSticker.enabled),
+                  label: '自动丢表情包：' + (qqConfig && qqConfig.autoSticker && qqConfig.autoSticker.enabled ? '开' : '关'),
+                  title: '收到图片自动收进表情包库（点一下切换）',
+                  onChange: toggleAutoSticker,
+                }),
                 h(
-                  'button',
-                  { className: 'cm-btn cm-btn-small', type: 'button', onClick: toggleAutoSticker },
-                  '自动丢表情包：' + (qqConfig && qqConfig.autoSticker && qqConfig.autoSticker.enabled ? '开' : '关'),
+                  'label',
+                  { className: 'cm-btn cm-btn-small', style: { cursor: 'pointer' }, title: '选本地图片收进表情包库' },
+                  stickerUploadBusy ? '上传中…' : '＋ 加图片',
+                  h('input', { type: 'file', accept: 'image/*', multiple: true, style: { display: 'none' }, onChange: uploadStickers }),
                 ),
               ),
             ),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('span', { className: 'cm-hint' }, '表情包文件夹'),
+              h('input', {
+                className: 'cm-input',
+                style: { flex: '1 1 260px', cursor: 'pointer' },
+                type: 'text',
+                readOnly: true,
+                value: stickerDirDraft !== '' ? stickerDirDraft : stickerDir,
+                placeholder: '点这里选择文件夹…',
+                onClick: () => pickStickerDir(),
+                title: '点一下弹出文件夹选择框',
+              }),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => pickStickerDir() }, '选择文件夹…'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: openStickerDir, title: '在资源管理器里打开这个文件夹' }, '📂 打开文件夹'),
+              h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: resetStickerDir, title: '恢复默认的 qq-stickers 目录' }, '默认'),
+            ),
+            h(
+              'div',
+              {
+                style: {
+                  border: '1px dashed rgba(127,127,127,0.45)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  fontSize: '12.5px',
+                  color: 'var(--cm-text-2, #64748b)',
+                  cursor: 'copy',
+                },
+                onDragOver: allowDrop,
+                onDrop: dropStickers,
+              },
+              stickerUploadBusy ? '上传中…' : '把图片拖到这里，直接放进表情包库（也可以点上面的「＋ 加图片」）',
+            ),
             stickers.length === 0
-              ? h('p', { className: 'cm-muted' }, '还没有收到过图片表情。QQ 里有人发图，会自动收进来。')
+              ? h('p', { className: 'cm-muted' }, '还没有见过表情包。收到图会先看一眼，是表情包/梗图才收进库，并写清「这图是什么、发它代表什么」；普通照片不收。')
               : h(
                   'ul',
                   { className: 'cm-qq-members' },
@@ -3949,8 +4358,18 @@ window.__ModuleLoader__.load({
                       { key: sticker.id, className: 'cm-qq-member' },
                       h('span', { className: 'cm-qq-name' }, sticker.file.slice(0, 22)),
                       h('span', { className: 'cm-muted' }, Math.round((Number(sticker.bytes) || 0) / 1024) + ' KB · ' + (sticker.from || '未知来源')),
+                      h('input', {
+                        key: 'caption-' + (sticker.caption || ''),
+                        className: 'cm-input',
+                        style: { flex: '1 1 220px', minWidth: '180px', fontSize: '12px' },
+                        defaultValue: sticker.caption || '',
+                        title: '这句含义会存进表情包库，AI 发这张时靠它判断意味着什么',
+                        placeholder: '含义：这图是什么、发它代表什么（AI 收图时自动写）',
+                        onKeyDown: (event) => { if (event.key === 'Enter' && event.currentTarget) event.currentTarget.blur() },
+                        onBlur: (event) => { const next = String(event.target.value || '').trim(); if (next !== String(sticker.caption || '')) saveStickerCaption(sticker.id, next) },
+                      }),
                       h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => sendSticker(sticker.id) }, '发一张'),
-                      h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: async () => { try { const tagged = await apiPost('/qq/sticker/tag', { stickerId: sticker.id }); setScheduleNotice('已打标：' + ((tagged.tags || []).join('、') || tagged.caption || '无结果')) } catch (error) { setScheduleNotice('打标失败：' + error.message) } await loadQq() } }, '打标'),
+                      h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: async () => { try { const tagged = await apiPost('/qq/sticker/tag', { stickerId: sticker.id }); setScheduleNotice('已打标：' + ((tagged.tags || []).join('、') || tagged.caption || '无结果')) } catch (error) { setScheduleNotice('打标失败：' + error.message) } await loadQq() } }, '自动打标'),
                       h(
                         'button',
                         { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: stickerBusy === sticker.id, onClick: () => deleteSticker(sticker.id) },
@@ -4002,6 +4421,123 @@ window.__ModuleLoader__.load({
           ),
           h(
             'section',
+            { className: 'cm-app-card' },
+            h(
+              'div',
+              { className: 'cm-app-card-head' },
+              h('h3', null, 'AI 主动冒泡'),
+              h(
+                'span',
+                { className: 'cm-muted' },
+                (proactive && Array.isArray(proactive.pending) ? proactive.pending.length : 0) + ' 条待发 · 今天已冒泡 ' + ((proactive && proactive.sentToday) || 0) + ' 次',
+              ),
+            ),
+            !proactive
+              ? h('p', { className: 'cm-muted' }, '读取中…')
+              : h(
+                  'div',
+                  null,
+                  h('p', { className: 'cm-hint' }, 'AI 每轮聊完默认都会约一个时间——几分钟、几小时、几天、几年都行，到点它醒过来现场想说什么；不想说就不发。你一说新话，之前约好的时间就作废，它会按当时的判断重新定。只有你明确说「别打扰 / 别发」，它这一轮才不定。超过 QQ 被动回复窗口（私聊 60 分钟 / 群聊 5 分钟）的到点走主动消息通道，腾讯可能拦，发不出去会在下面写明原因。'),
+                  h(
+                    'div',
+                    { className: 'cm-qq-form' },
+                    h(SliderSwitch, {
+                      checked: proactive.enabled,
+                      disabled: proactiveBusy,
+                      label: proactive.enabled ? 'AI 主动冒泡：开' : 'AI 主动冒泡：关',
+                      title: '点一下切换 AI 主动冒泡',
+                      onChange: toggleProactive,
+                    }),
+                  ),
+                  h(
+                    'div',
+                    { className: 'cm-qq-form' },
+                    h('span', { className: 'cm-hint' }, '静默时段'),
+                    h('input', {
+                      className: 'cm-input',
+                      type: 'text',
+                      placeholder: '23:00',
+                      value: proactiveQuiet.start,
+                      onFocus: () => { proactiveQuietEditing.current = true },
+                      onBlur: () => { proactiveQuietEditing.current = false },
+                      onChange: (event) => setProactiveQuiet({ ...proactiveQuiet, start: event.target.value }),
+                    }),
+                    h('input', {
+                      className: 'cm-input',
+                      type: 'text',
+                      placeholder: '08:00',
+                      value: proactiveQuiet.end,
+                      onFocus: () => { proactiveQuietEditing.current = true },
+                      onBlur: () => { proactiveQuietEditing.current = false },
+                      onChange: (event) => setProactiveQuiet({ ...proactiveQuiet, end: event.target.value }),
+                    }),
+                    h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: proactiveBusy, onClick: saveProactiveQuiet }, '保存'),
+                  ),
+                  h(
+                    'div',
+                    { className: 'cm-qq-form' },
+                    h('span', { className: 'cm-hint' }, '每天最多（0 = 不限）'),
+                    h('input', {
+                      className: 'cm-input',
+                      type: 'number',
+                      min: '0',
+                      value: proactiveLimits.dailyLimit,
+                      onFocus: () => { proactiveLimitsEditing.current = true },
+                      onBlur: () => { proactiveLimitsEditing.current = false },
+                      onChange: (event) => setProactiveLimits({ ...proactiveLimits, dailyLimit: event.target.value }),
+                    }),
+                    h('span', { className: 'cm-hint' }, '条 · 同时挂着最多（0 = 不限）'),
+                    h('input', {
+                      className: 'cm-input',
+                      type: 'number',
+                      min: '0',
+                      value: proactiveLimits.maxPending,
+                      onFocus: () => { proactiveLimitsEditing.current = true },
+                      onBlur: () => { proactiveLimitsEditing.current = false },
+                      onChange: (event) => setProactiveLimits({ ...proactiveLimits, maxPending: event.target.value }),
+                    }),
+                    h('span', { className: 'cm-hint' }, '条 · 0 就是不限'),
+                    h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: proactiveBusy, onClick: saveProactiveLimits }, '保存'),
+                  ),
+                  proactiveNotice ? h('p', { className: 'cm-hint' }, proactiveNotice) : null,
+                  proactivePending.length === 0
+                    ? h('p', { className: 'cm-muted' }, '现在没有挂着的主动冒泡。')
+                    : h(
+                        'ul',
+                        { className: 'cm-qq-members' },
+                        proactivePending.map((item, index) =>
+                          h(
+                            'li',
+                            { key: item.id || 'pending-' + index, className: 'cm-qq-member' },
+                            h('span', { className: 'cm-qq-name' }, proactiveDueLabel(item)),
+                            h('span', { className: 'cm-person-memory-text' }, (String(item.note || '').trim() === '' ? '（没留念头，到点现场想）' : String(item.note)) + (String(item.reason || '').trim() === '' ? '' : '（' + clipProactiveText(item.reason, 36) + '）')),
+                            h('span', { className: 'cm-muted' }, (item.scope === 'group' ? '群 ' : '私聊 ') + proactivePeerName(item.scope, item.peerId)),
+                            h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: proactiveBusy, onClick: () => cancelProactive(item.id) }, '×'),
+                          ),
+                        ),
+                      ),
+                  h('p', { className: 'cm-hint' }, '最近记录'),
+                  proactiveRecent.length === 0
+                    ? h('p', { className: 'cm-muted' }, '还没有冒泡记录。')
+                    : h(
+                        'ul',
+                        { className: 'cm-qq-members' },
+                        proactiveRecent.slice(0, 5).map((item, index) => {
+                          const detail = clipProactiveText(item.status === 'sent' ? item.content : item.reason, 40)
+                          const label = proactiveStatusLabel(item.status) + (detail === '' ? '' : ' · ' + detail)
+                          return h(
+                            'li',
+                            { key: item.id || 'recent-' + index, className: 'cm-qq-member' },
+                            h('span', { className: 'cm-qq-name' }, proactiveDueLabel(item)),
+                            h('span', { className: 'cm-person-memory-text' }, label),
+                            h('span', { className: 'cm-muted' }, (item.sentAt || item.doneAt) ? formatStamp(item.sentAt || item.doneAt) : '—'),
+                          )
+                        }),
+                      ),
+                ),
+          ),
+          h(
+            'section',
             { className: 'cm-app-card cm-app-credits' },
             h('h3', null, '声明 / 参考'),
             h('p', { className: 'cm-hint' }, '参考项目：dsh-qqbot（作者 zaofan，MIT 许可）· https://github.com/zaofan/dsh-qqbot'),
@@ -4011,16 +4547,346 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 打开内置应用：目前只有 qqbot 一个。 */
-    function BuiltinAppView(props) {
-      const { appId, onBack } = props
-      if (appId === 'qqbot') return h(QqbotBuiltinApp, { onBack })
+    /**
+     * 自带的 AI语音 应用（独立插件 ai-voice 提供引擎和接口，界面挂在这里）。
+     * 所有数据走 /ai-voice/api；这个应用只在 AI语音 插件装上时才能打开。
+     */
+    function AiVoiceBuiltinApp(props) {
+      const { onBack } = props
+      const AV = '/ai-voice/api'
+      const [status, setStatus] = useState(null)
+      const [audio, setAudio] = useState([])
+      const [refs, setRefs] = useState([])
+      const [notice, setNotice] = useState('')
+      const [busyKind, setBusyKind] = useState('')
+      const [job, setJob] = useState(null)
+      const [lastDone, setLastDone] = useState(null)
+      const [desc, setDesc] = useState('温柔软糯的年轻女声，二十多岁，语速偏慢，声音轻一点')
+      const [line, setLine] = useState('你今天怎么这么晚才回来呀，我等了你好久。')
+      const [sayText, setSayText] = useState('你是不是……是不是不要我了。')
+      const [ref, setRef] = useState('')
+      const [emotion, setEmotion] = useState('crying')
+      const [alpha, setAlpha] = useState(1)
+      const [speed, setSpeed] = useState(1)
+      const [cfgDraft, setCfgDraft] = useState(null)
+
+      const avGet = useCallback((path) => fetch(AV + path, { headers: { accept: 'application/json' }, credentials: 'same-origin' }).then(unwrap), [])
+      const avPost = useCallback((path, body) => fetch(AV + path, { method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) }).then(unwrap), [])
+
+      const load = useCallback(async () => {
+        try {
+          const [st, a, r] = await Promise.all([avGet('/status'), avGet('/files?dir=audio'), avGet('/files?dir=ref')])
+          setStatus(st)
+          setAudio(Array.isArray(a.items) ? a.items : [])
+          setRefs(Array.isArray(r.items) ? r.items : [])
+          setCfgDraft((prev) => prev || { ...st.config })
+          setNotice('')
+        } catch (error) {
+          setNotice('读取 AI语音 失败：' + error.message)
+        }
+      }, [avGet])
+
+      useEffect(() => { load() }, [load])
+      const enabled = !!(status && status.config && status.config.enabled)
+      useEffect(() => {
+        if (ref === '' && refs.length > 0) {
+          const preferred = status && status.config && status.config.defaultRef ? status.config.defaultRef : ''
+          const found = refs.find((item) => item.name === preferred) || refs[0]
+          if (found) setRef(found.name)
+        }
+      }, [refs, ref, status])
+
+      const poll = useCallback(async (id) => {
+        for (let i = 0; i < 400; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          try {
+            const current = await avGet('/job?id=' + encodeURIComponent(id))
+            setJob(current)
+            if (current.status !== 'running') {
+              await load()
+              setBusyKind('')
+              if (current.status === 'done') {
+                const match = /generated in ([0-9.]+)s/.exec(current.log || '')
+                const seconds = match ? Math.round(Number(match[1])) : null
+                setLastDone({ kind: current.kind || '', at: new Date().toISOString(), seconds })
+                setNotice('生成完成' + (seconds !== null ? '，用时 ' + seconds + ' 秒' : '') + '，可以在下面试听/下载')
+              } else setNotice('生成失败：' + (current.error || '未知错误'))
+              return
+            }
+          } catch { /* ignore */ }
+        }
+      }, [avGet, load])
+
+      const runDesign = useCallback(async () => {
+        if (line.trim() === '') { setNotice('先写要念的内容'); return }
+        setBusyKind('design')
+        try {
+          const created = await avPost('/design', { desc, text: line })
+          setJob({ id: created.job, status: 'running', log: '' })
+          setNotice('已开始生成（CPU 上约 20 秒~几分钟）')
+          await load()
+          poll(created.job)
+        } catch (error) { setBusyKind(''); setNotice('生成失败：' + error.message) }
+      }, [avPost, desc, line, load, poll])
+
+      const runSpeak = useCallback(async () => {
+        if (ref === '') { setNotice('先去音库上传或生成一个参考音'); return }
+        if (sayText.trim() === '') { setNotice('先写要说的话'); return }
+        setBusyKind('speak')
+        try {
+          const created = await avPost('/speak', { ref, text: sayText, emotion, alpha, speed })
+          setJob({ id: created.job, status: 'running', log: '' })
+          setSayText('')
+          setNotice('已开始合成（CPU 上约半分钟~两分钟）')
+          await load()
+          poll(created.job)
+        } catch (error) { setBusyKind(''); setNotice('合成失败：' + error.message) }
+      }, [alpha, avPost, emotion, load, poll, ref, sayText, speed])
+
+      const saveToRef = useCallback(async (name) => {
+        try { await avPost('/copy-to-ref', { name }); setNotice('已存进参考音库'); await load() } catch (error) { setNotice('保存失败：' + error.message) }
+      }, [avPost, load])
+      const removeFile = useCallback(async (dir, name) => {
+        try { await avPost('/delete', { dir, name }); setNotice('已删除'); await load() } catch (error) { setNotice('删除失败：' + error.message) }
+      }, [avPost, load])
+      const openFolder = useCallback(async (dir) => { try { await avPost('/open', { dir }) } catch { /* ignore */ } }, [avPost])
+      const toggleEnabled = useCallback(async () => {
+        try { await avPost('/enabled', { enabled: !enabled }); await load() } catch (error) { setNotice('切换失败：' + error.message) }
+      }, [avPost, enabled, load])
+      const uploadRef = useCallback(async (event) => {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null
+        if (!file) return
+        try {
+          const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(String(reader.result || '').split(',').pop() || '')
+            reader.onerror = () => reject(new Error('读取文件失败'))
+            reader.readAsDataURL(file)
+          })
+          if (!/\.wav$/i.test(file.name)) throw new Error('参考音需要 wav 格式')
+          await avPost('/upload', { name: file.name, data })
+          setNotice('已上传参考音：' + file.name)
+          await load()
+        } catch (error) { setNotice('上传失败：' + error.message) }
+        finally { if (event && event.target) event.target.value = '' }
+      }, [avPost, load])
+      const saveCfg = useCallback(async () => {
+        try { await avPost('/config', cfgDraft || {}); setNotice('设置已保存'); await load() } catch (error) { setNotice('保存失败：' + error.message) }
+      }, [avPost, cfgDraft, load])
+
+      const card = (title, badge, ...children) => h('section', { className: 'cm-app-card', key: title },
+        h('div', { className: 'cm-app-card-head' }, h('h3', null, title), badge ? h('span', { className: 'cm-muted' }, badge) : null),
+        ...children,
+      )
+      const audioRow = (item) => h('li', { key: item.dir + ':' + item.name, className: 'cm-qq-member', style: { flexDirection: 'column', alignItems: 'stretch', gap: '4px' } },
+        h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+          h('span', { className: 'cm-qq-name' }, item.name),
+          h('span', { className: 'cm-muted' }, (item.kb || 0) + ' KB'),
+          h('span', { className: 'cm-muted' }, (item.dir === 'ref' ? '上传时间 ' : '生成时间 ') + formatStamp(item.at)),
+          h('a', { className: 'cm-btn cm-btn-small', href: AV + '/file?dir=' + (item.dir || 'audio') + '&name=' + encodeURIComponent(item.name) }, '下载'),
+          item.dir === 'audio' ? h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => saveToRef(item.name) }, '存为参考音') : null,
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => removeFile(item.dir || 'audio', item.name) }, '删除'),
+        ),
+        h('audio', {
+          controls: true,
+          preload: 'none',
+          src: AV + '/file?dir=' + (item.dir || 'audio') + '&inline=1&name=' + encodeURIComponent(item.name),
+          style: { width: '100%' },
+          onPlay: (event) => {
+            try {
+              const current = event && event.currentTarget ? event.currentTarget : (event && event.target)
+              const players = document.querySelectorAll('.cm-app audio')
+              for (const player of players) {
+                if (player !== current && player && !player.paused) player.pause()
+              }
+            } catch { /* ignore */ }
+          },
+        }),
+      )
+
+      const engines = status && status.engines ? status.engines : null
+      const jobLine = job && job.status === 'running' ? '（' + (busyKind === 'design' ? '声音设计' : '合成') + '中…）' : ''
+
+      return h('div', { className: 'cm-app' },
+        h('div', { className: 'cm-app-head' },
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
+          h('div', { className: 'cm-app-title' }, h('h2', null, 'AI语音')),
+          h(
+            'label',
+            { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: 'AI语音 总开关' },
+            h('input', { type: 'checkbox', checked: enabled, onChange: toggleEnabled }),
+            h('span', { className: 'cm-switch-slider' }),
+            h('span', { className: 'cm-switch-text', style: { color: '#fff' } }, enabled ? 'AI语音：开' : 'AI语音：关'),
+          ),
+        ),
+        h('div', { className: 'cm-app-body' },
+          notice ? h('p', { className: 'cm-hint' }, notice) : null,
+          card('声音设计（VoxCPM2）', 'CPU 上约 20 秒~几分钟',
+            h('p', { className: 'cm-hint' }, '用文字描述造一个声音；生成后可以试听、下载，或点「存为参考音」给下面的情绪合成用。'),
+            h('textarea', { className: 'cm-input', rows: 2, style: { width: '100%', boxSizing: 'border-box' }, value: desc, onChange: (event) => setDesc(event.target.value), placeholder: '音色描述，例如：温柔软糯的年轻女声，二十多岁，语速偏慢' }),
+            h('textarea', { className: 'cm-input', rows: 2, style: { width: '100%', boxSizing: 'border-box', marginTop: '6px' }, value: line, onChange: (event) => setLine(event.target.value), placeholder: '要念的内容（1~2 句）' }),
+            h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runDesign }, busyKind === 'design' ? '生成中…' : '生成音频'),
+              h('span', { className: 'cm-hint' }, jobLine),
+            ),
+            lastDone && lastDone.kind === 'design' ? h('p', { className: 'cm-hint' }, '上次生成时间：' + formatStamp(lastDone.at) + (lastDone.seconds !== null ? '，用时 ' + lastDone.seconds + ' 秒' : '')) : null,
+          ),
+          card('带情绪说话（IndexTTS-2.5）', '哭腔 / 笑 / 生气…',
+            h('div', { className: 'cm-qq-form' },
+              h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: ref, onChange: (event) => setRef(event.target.value) },
+                refs.length === 0 ? h('option', { value: '' }, '（还没有参考音）') : null,
+                refs.map((item) => h('option', { key: item.name, value: item.name }, item.name)),
+              ),
+            ),
+            h('input', {
+              type: 'text',
+              className: 'cm-input',
+              style: { width: '100%', boxSizing: 'border-box', marginTop: '6px' },
+              value: sayText,
+              onChange: (event) => setSayText(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key !== 'Enter' || event.shiftKey) return
+                if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return
+                event.preventDefault()
+                if (busyKind !== '' || !enabled) return
+                runSpeak()
+              },
+              placeholder: '要说的话，回车直接合成（Enter）',
+            }),
+            h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } },
+              [['neutral', '平静'], ['happy', '开心'], ['laugh', '大笑'], ['sad', '悲伤'], ['crying', '哭腔'], ['angry', '生气'], ['afraid', '害怕'], ['surprised', '惊讶'], ['spoiled', '撒娇'], ['tired', '疲惫']].map(([key, label]) =>
+                h('button', { key, type: 'button', className: 'cm-btn cm-btn-small' + (emotion === key ? ' cm-btn-primary' : ''), onClick: () => setEmotion(key) }, label),
+              ),
+            ),
+            h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+              h('span', { className: 'cm-hint' }, '情绪强度'),
+              h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: alpha, onChange: (event) => setAlpha(Number(event.target.value)) }),
+              h('span', { className: 'cm-hint' }, String(alpha)),
+              h('span', { className: 'cm-hint' }, '语速'),
+              h('input', { type: 'range', min: '0.5', max: '2', step: '0.05', value: speed, onChange: (event) => setSpeed(Number(event.target.value)) }),
+              h('span', { className: 'cm-hint' }, String(speed)),
+            ),
+            h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runSpeak }, busyKind === 'speak' ? '合成中…' : '合成语音'),
+              h('span', { className: 'cm-hint' }, job && job.status === 'running' && busyKind === 'speak' ? '合成中…' : ''),
+            ),
+            h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, '生成的语音在下面：'),
+            audio.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有生成过音频。')
+              : h('ul', { className: 'cm-qq-members' }, audio.slice(0, 10).map(audioRow)),
+          ),
+          card('参考音库', refs.length + ' 个',
+            h('div', { className: 'cm-qq-form' },
+              h('label', { className: 'cm-btn cm-btn-small', style: { cursor: 'pointer' } }, '上传录音（wav）',
+                h('input', { type: 'file', accept: '.wav,audio/wav', style: { display: 'none' }, onChange: uploadRef }),
+              ),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('ref') }, '打开文件夹'),
+            ),
+            refs.length === 0 ? h('p', { className: 'cm-muted' }, '还没有参考音：先在上面生成一个，或上传你的录音。') : h('ul', { className: 'cm-qq-members' }, refs.map(audioRow)),
+          ),
+          card('设置', '',
+            h('label', { className: 'cm-hint' }, 'VoxCPM2 Python 路径'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.voxcpmPython : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), voxcpmPython: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'VoxCPM2 模型目录'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.voxcpmModel : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), voxcpmModel: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'IndexTTS-2.5 Python 路径'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.indexttsPython : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), indexttsPython: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'IndexTTS-2.5 模型目录'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.indexttsModel : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), indexttsModel: event.target.value }) }),
+            h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: saveCfg }, '保存设置'),
+              h('span', { className: 'cm-hint' }, status && status.config ? '数据目录：' + status.config.dataDir : ''),
+            ),
+            h('p', { className: 'cm-hint' }, '引擎：VoxCPM2 ' + (engines && engines.voxcpm && engines.voxcpm.ready ? '就绪' : '未就绪') + ' · IndexTTS-2.5 ' + (engines && engines.indextts && engines.indextts.ready ? '就绪' : '未就绪')),
+            h('div', { className: 'cm-qq-form' },
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('audio') }, '打开输出文件夹'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('data') }, '打开数据文件夹'),
+            ),
+          ),
+          h(
+            'section',
+            { className: 'cm-app-card cm-app-credits' },
+            h('h3', null, '来源 / 声明'),
+            h('p', { className: 'cm-hint' }, '来源：本地安装的 AI语音 插件（ai-voice，作者 Root-7-KHX）提供引擎与接口，界面挂在 AI记忆 面板里；两个语音引擎分别来自开源项目 VoxCPM2（OpenBMB，Apache-2.0 许可）· https://github.com/OpenBMB/VoxCPM 与 IndexTTS-2.5（bilibili IndexTeam，模型使用许可）· https://github.com/index-tts/index-tts。'),
+            h('p', { className: 'cm-hint' }, '声明：所有语音都在本机生成、只存在本机，不会上传网络；模型与权重版权归原作者，按各自许可使用；克隆或使用他人声音须事先取得本人同意，禁止冒充、诈骗等违法用途，由此产生的后果由使用者自己承担。'),
+          ),
+        ),
+      )
+    }
+
+    /**
+     * 统一应用页：所有应用（自带 / 外部 / 第三方）都用这一个壳：
+     *   顶部「← 返回 + 应用名 + 右上角总开关」+ 同一种卡片主体。
+     * 应用自己没有界面时，也由插件自带这个页面（不会出现"没有界面"的死胡同）。
+     */
+    function UnifiedAppPage(props) {
+      const { item, appId, enabled, onToggle, onBack, children } = props
+      const title = (item && item.name) || appId || '应用'
       return h(
         'div',
         { className: 'cm-app' },
-        h('div', { className: 'cm-app-head' }, h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'), h('div', { className: 'cm-app-title' }, h('h2', null, '自带应用'))),
-        h('div', { className: 'cm-app-body' }, h('p', { className: 'cm-muted' }, '这个自带应用还没有界面。')),
+        h(
+          'div',
+          { className: 'cm-app-head' },
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
+          h('div', { className: 'cm-app-title' }, h('h2', null, title)),
+          h(
+            'label',
+            { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: title + ' 总开关' },
+            h('input', { type: 'checkbox', checked: enabled !== false, onChange: (event) => onToggle && onToggle(event.target.checked) }),
+            h('span', { className: 'cm-switch-slider' }),
+            h('span', { className: 'cm-switch-text', style: { color: '#fff' } }, title + '：' + (enabled !== false ? '开' : '关')),
+          ),
+        ),
+        h('div', { className: 'cm-app-body' }, children),
       )
+    }
+
+    /** 第三方/外部应用没有自带界面时，由 AI记忆 自带的统一页面顶上（开关也由插件记住）。 */
+    function DefaultAppPage(props) {
+      const { appId, item, onBack } = props
+      const info = item || { name: appId || '应用' }
+      const [enabled, setEnabled] = useState(info.enabled !== false)
+      const [notice, setNotice] = useState('')
+      const toggle = useCallback(async (next) => {
+        setEnabled(next)
+        try {
+          await apiPost('/integrations/state', { id: info.id || appId, enabled: next })
+          setNotice(next ? '已开启' : '已关闭（插件已记住）')
+        } catch (error) {
+          setNotice('保存开关失败：' + error.message)
+        }
+      }, [appId, info.id])
+      return h(
+        UnifiedAppPage,
+        { item: info, appId, enabled, onToggle: toggle, onBack },
+        notice ? h('p', { className: 'cm-hint' }, notice) : null,
+        h(
+          'section',
+          { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '说明')),
+          h('p', { className: 'cm-hint' }, info.description || '这个应用还没有写说明。'),
+          info.author ? h('p', { className: 'cm-hint' }, '作者：' + info.author) : null,
+          info.homepage ? h('p', { className: 'cm-hint' }, '主页：' + info.homepage) : null,
+          h('p', { className: 'cm-hint' }, '这个应用没有提供自己的界面，但开关和页面样式由 AI记忆 统一提供。'),
+        ),
+        Array.isArray(info.capabilities) && info.capabilities.length > 0
+          ? h(
+              'section',
+              { className: 'cm-app-card' },
+              h('div', { className: 'cm-app-card-head' }, h('h3', null, '能力')),
+              h('ul', { className: 'cm-qq-members' }, info.capabilities.map((cap) => h('li', { key: cap, className: 'cm-qq-member' }, h('span', null, cap)))),
+            )
+          : null,
+      )
+    }
+
+    function BuiltinAppView(props) {
+      const { appId, item, onBack } = props
+      if (appId === 'qqbot') return h(QqbotBuiltinApp, { onBack })
+      if (appId === 'ai-voice') return h(AiVoiceBuiltinApp, { onBack })
+      // 其它应用：插件自带统一页面（说明 + 能力 + 开关），以后装进来也长这样
+      return h(DefaultAppPage, { appId, item, onBack })
     }
 
     function IntegrationCard(props) {
@@ -4053,10 +4919,23 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-int-card-foot' },
           h('span', { className: 'cm-muted' }, item.author ? '作者 ' + item.author : ''),
-          item.openable
+          typeof props.onToggleApp === 'function'
+            ? h(
+                'label',
+                { className: 'cm-switch', style: { marginLeft: 'auto' }, title: (item.name || '应用') + ' 总开关' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: !!props.appEnabled,
+                  onChange: (event) => props.onToggleApp(item, event.target.checked),
+                }),
+                h('span', { className: 'cm-switch-slider' }),
+                h('span', { className: 'cm-switch-text' }, (item.name || '应用') + '：' + (props.appEnabled ? '开' : '关')),
+              )
+            : null,
+          item.openable !== false
             ? h(
                 'button',
-                { className: 'cm-btn cm-btn-small cm-btn-primary cm-int-open', type: 'button', onClick: () => props.onOpen && props.onOpen(item.app) },
+                { className: 'cm-btn cm-btn-small cm-btn-primary cm-int-open', type: 'button', onClick: () => props.onOpen && props.onOpen(item.app || item.id) },
                 '打开',
               )
             : null,
@@ -4081,6 +4960,26 @@ window.__ModuleLoader__.load({
       const [guideOpen, setGuideOpen] = useState(false)
       // 点开「自带应用」后整页切到应用界面（不离开面板）
       const [openApp, setOpenApp] = useState('')
+      // 「申请接入」表单：在面板里直接填一份清单，写进 integrations 目录（不用去 GitHub）
+      const [formOpen, setFormOpen] = useState(false)
+      const [formBusy, setFormBusy] = useState(false)
+      const [form, setForm] = useState({
+        id: '',
+        name: '',
+        version: '',
+        author: '',
+        category: '',
+        homepage: '',
+        tags: '',
+        capabilities: '',
+        description: '',
+      })
+      // 自带 QQ 应用的总开关：卡片上直接显示开/关
+      const [qq, setQq] = useState(null)
+      // 独立插件「AI语音」的总开关：接入软件卡片上直接显示开/关
+      const [avVoice, setAvVoice] = useState(null)
+      // 通用应用开关状态：清单里带 statusUrl 的应用自动读取（以后新应用也走这里）
+      const [appStates, setAppStates] = useState({})
 
       const load = useCallback(async () => {
         setBusy(true)
@@ -4107,6 +5006,134 @@ window.__ModuleLoader__.load({
         load()
       }, [load])
 
+      const loadQqStatus = useCallback(async () => {
+        try {
+          setQq(await apiGet('/qq/status'))
+        } catch {
+          // QQ 状态读不到不影响接入软件页
+        }
+      }, [])
+
+      useEffect(() => {
+        loadQqStatus()
+        const timer = setInterval(loadQqStatus, 5000)
+        return () => clearInterval(timer)
+      }, [loadQqStatus])
+
+      const loadAvVoice = useCallback(async () => {
+        try {
+          const res = await fetch('/ai-voice/api/status', { headers: { accept: 'application/json' }, credentials: 'same-origin' })
+          setAvVoice(res.ok ? await unwrap(res) : null)
+        } catch { setAvVoice(null) }
+      }, [])
+
+      useEffect(() => {
+        loadAvVoice()
+        const timer = setInterval(loadAvVoice, 5000)
+        return () => clearInterval(timer)
+      }, [loadAvVoice])
+
+      /** 每张卡片的开关状态：QQ / AI语音 走各自接口，其它应用读插件自己记住的状态。 */
+      const appEnabledFor = useCallback((item) => {
+        if (!item) return true
+        if (item.id === 'qqbot-app') return !!(qq && qq.enabled)
+        if (item.app === 'ai-voice') return !!(avVoice && avVoice.config && avVoice.config.enabled)
+        if (item.id in appStates) return !!appStates[item.id]
+        if (typeof item.enabled === 'boolean') return item.enabled
+        return true
+      }, [qq, avVoice, appStates])
+
+      const loadGenericApps = useCallback(async (items) => {
+        const next = {}
+        for (const item of items) {
+          if (!item || typeof item.statusUrl !== 'string' || item.statusUrl === '') continue
+          try {
+            const res = await fetch(item.statusUrl, { headers: { accept: 'application/json' }, credentials: 'same-origin' })
+            const payload = res.ok ? await res.json() : null
+            const value = payload && payload.ok === true ? payload.value : null
+            if (value && typeof value.enabled === 'boolean') next[item.id] = value.enabled
+          } catch { /* ignore */ }
+        }
+        if (Object.keys(next).length > 0) setAppStates((prev) => ({ ...prev, ...next }))
+      }, [])
+
+      useEffect(() => {
+        if (!payload || !Array.isArray(payload.items)) return
+        loadGenericApps(payload.items)
+        const timer = setInterval(() => loadGenericApps(payload.items), 5000)
+        return () => clearInterval(timer)
+      }, [payload, loadGenericApps])
+
+      const toggleAvVoice = useCallback(async (enabled) => {
+        try {
+          const next = await fetch('/ai-voice/api/enabled', {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ enabled }),
+          }).then(unwrap)
+          setAvVoice((prev) => ({ ...(prev || {}), config: { ...((prev && prev.config) || {}), enabled: next.enabled } }))
+          notify(enabled ? '已开启 AI语音' : '已关闭 AI语音（生成请求会被拒绝）')
+        } catch (caught) {
+          notify('切换 AI语音 失败：' + caught.message, true)
+        }
+      }, [notify])
+
+      /** 统一的应用开关：清单里带 enabledUrl 的应用通用支持；内置的 qqbot/ai-voice 走各自接口。 */
+      const toggleApp = useCallback(async (item, enabled) => {
+        const app = item && item.app ? item.app : ''
+        try {
+          if (app === 'qqbot' || app === 'qqbot-app') {
+            const next = await apiPost('/qq/enabled', { enabled })
+            setQq(next)
+            notify(enabled ? '已开启 QQ 机器人' : '已关闭 QQ 机器人（已断开）')
+            return
+          }
+          if (item && typeof item.enabledUrl === 'string' && item.enabledUrl !== '') {
+            const next = await fetch(item.enabledUrl, {
+              method: 'POST',
+              headers: { accept: 'application/json', 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ enabled }),
+            }).then(unwrap)
+            const value = next && typeof next.enabled === 'boolean' ? next.enabled : enabled
+            setAppStates((prev) => ({ ...prev, [item.id]: value }))
+            notify((enabled ? '已开启 ' : '已关闭 ') + (item.name || app))
+            return
+          }
+          if (app === 'ai-voice') {
+            const next = await fetch('/ai-voice/api/enabled', {
+              method: 'POST',
+              headers: { accept: 'application/json', 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ enabled }),
+            }).then(unwrap)
+            setAvVoice((prev) => ({ ...(prev || {}), config: { ...((prev && prev.config) || {}), enabled: next.enabled } }))
+            notify(enabled ? '已开启 AI语音' : '已关闭 AI语音（生成请求会被拒绝）')
+            return
+          }
+          if (item && item.id) {
+            const next = await apiPost('/integrations/state', { id: item.id, enabled })
+            setAppStates((prev) => ({ ...prev, [item.id]: next.enabled === true }))
+            notify((enabled ? '已开启 ' : '已关闭 ') + (item.name || item.id))
+            return
+          }
+          notify('这个应用还没有提供开关接口')
+        } catch (caught) {
+          notify('切换失败：' + caught.message, true)
+        }
+      }, [notify])
+
+      const toggleQq = useCallback(async (enabled) => {
+        try {
+          const next = await apiPost('/qq/enabled', { enabled })
+          setQq(next)
+          notify(enabled ? '已开启 QQ 接入' : '已关闭 QQ 接入（已断开，不再收发消息）')
+        } catch (caught) {
+          notify('切换失败：' + caught.message, true)
+        }
+      }, [notify])
+
       const makeExample = useCallback(async () => {
         setBusy(true)
         try {
@@ -4119,6 +5146,27 @@ window.__ModuleLoader__.load({
           setBusy(false)
         }
       }, [load, notify])
+
+      const formField = (key) => ({
+        value: form[key],
+        onChange: (event) => setForm((prev) => ({ ...prev, [key]: event.target.value })),
+      })
+
+      const submitIntegrationForm = useCallback(async () => {
+        if (formBusy) return
+        setFormBusy(true)
+        try {
+          const created = await apiPost('/integrations/item', form)
+          await load()
+          notify('已写入清单：' + ((created && created.file) || form.id + '.json'))
+          setForm({ id: '', name: '', version: '', author: '', category: '', homepage: '', tags: '', capabilities: '', description: '' })
+          setFormOpen(false)
+        } catch (caught) {
+          notify('提交失败：' + caught.message, true)
+        } finally {
+          setFormBusy(false)
+        }
+      }, [form, formBusy, load, notify])
 
       const items = payload && Array.isArray(payload.items) ? payload.items : []
       // 本应用自带的接入（内置清单，不需要 integrations 目录）
@@ -4139,7 +5187,9 @@ window.__ModuleLoader__.load({
           : '自带 ' + builtinItems.length + ' 个 · 外部已接入 ' + items.length + ' 个'
 
       if (openApp !== '') {
-        return h(BuiltinAppView, { appId: openApp, onBack: () => setOpenApp('') })
+        const allApps = [...(Array.isArray(builtinItems) ? builtinItems : []), ...items]
+        const appItem = allApps.find((item) => (item.app || item.id) === openApp) || null
+        return h(BuiltinAppView, { appId: openApp, item: appItem, onBack: () => setOpenApp('') })
       }
 
       return h(
@@ -4147,8 +5197,19 @@ window.__ModuleLoader__.load({
         { className: 'cm-tab-body' },
         h(
           'div',
-          { className: 'cm-int-topline' },
+          { className: 'cm-int-topline', style: { margin: '0 0 -6px' } },
           h('span', { className: 'cm-int-topline-hint' }, '想让自己的软件也出现在这里？'),
+          h(
+            'button',
+            {
+              className: 'cm-int-submit',
+              type: 'button',
+              style: { appearance: 'none', background: 'transparent', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' },
+              onClick: () => setFormOpen((open) => !open),
+            },
+            (formOpen ? '▾' : '▸') + ' 申请接入（面板里填表）',
+          ),
+          h('span', { className: 'cm-int-topline-hint' }, '·'),
           h(
             'a',
             {
@@ -4160,6 +5221,95 @@ window.__ModuleLoader__.load({
             '申请收录软件 ↗',
           ),
         ),
+        formOpen
+          ? h(
+              'div',
+                {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginTop: '8px',
+                    padding: '10px 12px',
+                    border: '1px solid var(--cm-border, #d8dbe2)',
+                    borderRadius: '8px',
+                  },
+                },
+                h(
+                  'div',
+                  { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '8px' } },
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    'id（必填）',
+                    h('input', { className: 'cm-input', ...formField('id'), placeholder: 'my-tool' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '名称（必填）',
+                    h('input', { className: 'cm-input', ...formField('name'), placeholder: '我的工具' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '版本',
+                    h('input', { className: 'cm-input', ...formField('version'), placeholder: '1.0.0' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '作者',
+                    h('input', { className: 'cm-input', ...formField('author'), placeholder: '谁做的' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '分类',
+                    h('input', { className: 'cm-input', ...formField('category'), placeholder: '应用 / 通道 / 工具' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '主页',
+                    h('input', { className: 'cm-input', ...formField('homepage'), placeholder: 'https://…' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '标签（逗号分隔）',
+                    h('input', { className: 'cm-input', ...formField('tags'), placeholder: 'QQ, 语音, 记忆' }),
+                  ),
+                  h(
+                    'label',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                    '能力（逗号分隔）',
+                    h('input', { className: 'cm-input', ...formField('capabilities'), placeholder: '收发消息, 写记忆' }),
+                  ),
+                ),
+                h(
+                  'label',
+                  { style: { display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12px' } },
+                  '说明',
+                  h('textarea', {
+                    className: 'cm-input',
+                    rows: 3,
+                    ...formField('description'),
+                    placeholder: '一句话说清这个软件是什么、能干什么、怎么接进来。',
+                  }),
+                ),
+                h(
+                  'div',
+                  { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+                  h(
+                    'button',
+                    { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: formBusy, onClick: submitIntegrationForm },
+                    formBusy ? '提交中…' : '提交并写入清单',
+                  ),
+                  h('span', { className: 'cm-muted' }, '只写一份描述数据、不执行代码；同 id 再提交会覆盖更新，刷新后出现在上面列表里。'),
+                ),
+              )
+          : null,
         h(
           'div',
           { className: 'cm-int-toolbar' },
@@ -4199,7 +5349,15 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'cm-int-grid' },
-                filteredBuiltin.map((item) => h(IntegrationCard, { key: item.id, item, onOpen: setOpenApp })),
+                filteredBuiltin.map((item) =>
+                  h(IntegrationCard, {
+                    key: item.id,
+                    item,
+                    onOpen: setOpenApp,
+                    appEnabled: appEnabledFor(item),
+                    onToggleApp: toggleApp,
+                  }),
+                ),
               ),
             )
           : null,
@@ -4216,7 +5374,15 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'cm-int-grid' },
-                filtered.map((item) => h(IntegrationCard, { key: item.id, item })),
+                filtered.map((item) =>
+                  h(IntegrationCard, {
+                    key: item.id,
+                    item,
+                    onOpen: setOpenApp,
+                    appEnabled: appEnabledFor(item),
+                    onToggleApp: toggleApp,
+                  }),
+                ),
               ),
             )
           : null,
@@ -4263,7 +5429,7 @@ window.__ModuleLoader__.load({
                   null,
                   h('li', null, '在上面那个目录里新建一个 <id>.json 清单（也可以点「生成示例清单」照着改）。'),
                   h('li', null, '至少写 id 和 name；description / version / author / category / tags / homepage 都是可选的，写得越清楚，搜索越好找。'),
-                  h('li', null, '回面板点「刷新」，卡片就出现在上面了。'),
+                  h('li', null, '回面板点「刷新」，卡片就出现在上面了（开关和打开后的页面由插件自带，清单里不用写）。'),
                 ),
                 h(
                   'p',
@@ -4601,7 +5767,7 @@ window.__ModuleLoader__.load({
         }
       }, [notify, switchSession])
 
-      const toggleEnabled = useCallback(async () => {
+      const toggleEnabled = useCallback(async (nextEnabled) => {
         const target = sessionRef.current
         if (!target) {
           notify('请先选择一个对话', true)
@@ -4610,7 +5776,7 @@ window.__ModuleLoader__.load({
         setBusy(true)
         try {
           setActiveSession(target)
-          const next = !(snapshot && snapshot.enabled === true)
+          const next = typeof nextEnabled === 'boolean' ? nextEnabled : !(snapshot && snapshot.enabled === true)
           await apiPost('/enable', { enabled: next })
           notify(next ? '已开启本对话的伴侣记忆' : '已关闭本对话的伴侣记忆（数据仍保留）', false)
           await refresh()
@@ -4781,16 +5947,13 @@ window.__ModuleLoader__.load({
                   )
                 : null,
             ),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: `cm-btn cm-btn-small${enabled ? '' : ' cm-btn-primary'}`,
-                disabled: busy || !sessionId,
-                onClick: toggleEnabled,
-              },
-              busy ? '处理中…' : enabled ? '关闭本对话' : '开启本对话',
-            ),
+            h(SliderSwitch, {
+              checked: enabled,
+              disabled: busy || !sessionId,
+              label: busy ? '处理中…' : enabled ? '本对话记忆：开' : '本对话记忆：关',
+              title: '点一下开启/关闭这个对话的伴侣记忆（不会删除已有数据）',
+              onChange: toggleEnabled,
+            }),
           ),
           h('div', { className: 'cm-hint' }, '每个对话拥有独立的人格文档、好感度、记忆与知识库；新对话默认关闭，开启或关闭都不会删除已有数据。'),
         ),
