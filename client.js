@@ -1710,6 +1710,9 @@ window.__ModuleLoader__.load({
               }),
             )
             : null,
+          Array.isArray(memory.tags) && memory.tags.includes('习惯')
+            ? h('span', { className: 'cm-tag', title: '习惯强度 0~100：再次被提到 +10（封顶 100）；没有加强时每个聊天日 -1，降到 0 自动移入知识库' }, `强度 ${Number.isFinite(Number(memory.habitStrength)) ? Math.round(Number(memory.habitStrength)) : 50}/100`)
+            : null,
           (memory.tags || []).map((tag) => h('span', { key: tag, className: 'cm-tag' }, tag)),
           Number(memory.recurringCount) > 1
             ? h('span', { className: 'cm-tag', title: '用户反复问到的事，达到次数后自动记进全局记忆' }, `已问 ${memory.recurringCount} 次`)
@@ -2248,12 +2251,17 @@ window.__ModuleLoader__.load({
           h(
             'button',
             { className: 'cm-collapse', type: 'button', onClick: () => setShowHabits((value) => !value) },
-            `${showHabits ? '▾' : '▸'} 对话人习惯（${habitMemories.length} 条 · 长期不清）`,
+            `${showHabits ? '▾' : '▸'} 对话人习惯（${habitMemories.length} 条 · 强度 0~100，到 0 自动清）`,
           ),
           showHabits
-            ? habitMemories.length === 0
-              ? h('p', { className: 'cm-muted' }, '还没有习惯记录。AI 会在聊到作息/上下班上下学/爱吃什么/爱玩什么时自动记一条。')
-              : h('div', { className: 'cm-memory-list' }, habitMemories.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails })))
+            ? h(
+                'div',
+                null,
+                h('p', { className: 'cm-hint' }, '每个习惯有 0~100 强度：建立时 50；再次提到会加强 +10（封顶 100）；没有加强时每个聊天日 -1，降到 0 自动移入知识库（原文仍可检索）。'),
+                habitMemories.length === 0
+                  ? h('p', { className: 'cm-muted' }, '还没有习惯记录。AI 会在聊到作息/上下班上下学/爱吃什么/爱玩什么时自动记一条。')
+                  : h('div', { className: 'cm-memory-list' }, habitMemories.map((memory) => h(MemoryCard, { key: memory.id, memory, refresh, notify, showDetails }))),
+              )
             : null,
         ),
         h(
@@ -4328,7 +4336,7 @@ window.__ModuleLoader__.load({
                 title: '点一下弹出文件夹选择框',
               }),
               h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => pickStickerDir() }, '选择文件夹…'),
-              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: openStickerDir, title: '在资源管理器里打开这个文件夹' }, '📂 打开文件夹'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: openStickerDir, title: '在资源管理器里打开这个文件夹' }, '打开文件夹'),
               h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: resetStickerDir, title: '恢复默认的 qq-stickers 目录' }, '默认'),
             ),
             h(
@@ -4578,6 +4586,8 @@ window.__ModuleLoader__.load({
       const [qwenAudio, setQwenAudio] = useState([])
       const [refs, setRefs] = useState([])
       const [notice, setNotice] = useState('')
+      // 参考音库「选择文件夹并打开」的结果提示
+      const [refDirNotice, setRefDirNotice] = useState('')
       const [busyKind, setBusyKind] = useState('')
       const [job, setJob] = useState(null)
       const [lastDone, setLastDone] = useState(null)
@@ -4777,6 +4787,21 @@ window.__ModuleLoader__.load({
         try { await avPost('/delete', { dir, name }); setNotice('已删除'); await load() } catch (error) { setNotice('删除失败：' + error.message) }
       }, [avPost, load])
       const openFolder = useCallback(async (dir) => { try { await avPost('/open', { dir }) } catch { /* ignore */ } }, [avPost])
+      /** 参考音库：「选择文件夹」——只选目录，不自动打开（要打开点旁边的「打开文件夹」）。 */
+      const pickRefDirAndOpen = useCallback(async () => {
+        try {
+          const initial = status && status.config ? String(status.config.refDir || '') : ''
+          const picked = await avPost('/pickdir', { initial })
+          const dir = picked && typeof picked.dir === 'string' ? picked.dir : ''
+          if (dir === '') {
+            setRefDirNotice('已取消（没有选中文件夹）')
+            return
+          }
+          setRefDirNotice('已选择：' + dir + '（要打开就点「打开文件夹」）')
+        } catch (error) {
+          setRefDirNotice('选择文件夹失败：' + String(error && error.message ? error.message : error))
+        }
+      }, [avPost, status])
       const toggleEnabled = useCallback(async () => {
         try {
           if (enabled) {
@@ -5165,7 +5190,9 @@ window.__ModuleLoader__.load({
                 h('input', { type: 'file', accept: '.wav,audio/wav', style: { display: 'none' }, onChange: uploadRef }),
               ),
               h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('ref') }, '打开文件夹'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: pickRefDirAndOpen }, '选择文件夹'),
             ),
+            refDirNotice ? h('p', { className: 'cm-hint' }, refDirNotice) : null,
             refs.length === 0 ? h('p', { className: 'cm-muted' }, '还没有参考音：先在上面生成一个，或上传你的录音。') : h('ul', { className: 'cm-qq-members' }, refs.map(audioRow)),
           ),
           card('设置', '',
@@ -5231,7 +5258,7 @@ window.__ModuleLoader__.load({
      * 应用自己没有界面时，也由插件自带这个页面（不会出现"没有界面"的死胡同）。
      */
     function UnifiedAppPage(props) {
-      const { item, appId, enabled, onToggle, onBack, children } = props
+      const { item, appId, enabled, onToggle, onBack, children, showSwitch } = props
       const title = (item && item.name) || appId || '应用'
       return h(
         'div',
@@ -5241,13 +5268,15 @@ window.__ModuleLoader__.load({
           { className: 'cm-app-head' },
           h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
           h('div', { className: 'cm-app-title' }, h('h2', null, title)),
-          h(
-            'label',
-            { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: title + ' 总开关' },
-            h('input', { type: 'checkbox', checked: enabled !== false, onChange: (event) => onToggle && onToggle(event.target.checked) }),
-            h('span', { className: 'cm-switch-slider' }),
-            h('span', { className: 'cm-switch-text', style: { color: '#fff' } }, title + '：' + (enabled !== false ? '开' : '关')),
-          ),
+          showSwitch === false
+            ? null
+            : h(
+              'label',
+              { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: title + ' 总开关' },
+              h('input', { type: 'checkbox', checked: enabled !== false, onChange: (event) => onToggle && onToggle(event.target.checked) }),
+              h('span', { className: 'cm-switch-slider' }),
+              h('span', { className: 'cm-switch-text', style: { color: '#fff' } }, title + '：' + (enabled !== false ? '开' : '关')),
+            ),
         ),
         h('div', { className: 'cm-app-body' }, children),
       )
@@ -5292,17 +5321,756 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 「习惯提示小模型」的统一窗口（AI记忆 自带承载）：
+     * 训练进度 / 当前模型 / 最近一次提示 / 开关 / 说明，数据来自插件自己注册的 /habit-hint/api/*。
+     * 插件没加载或接口报错时显示「插件未加载/未响应」+ 重试，不会白屏。
+     */
+    function HabitHintBuiltinApp(props) {
+      const { item, onBack } = props
+      // 接口前缀从清单里读（插件注册路由时若回退到 /habit-hint/api2，这里自动跟着变）
+      const HH = (item && typeof item.statusUrl === 'string' && item.statusUrl !== ''
+        ? item.statusUrl
+        : '/habit-hint/api/status').replace(/\/status\/?$/, '')
+      const [status, setStatus] = useState(null)
+      const [error, setError] = useState('')
+      const [notice, setNotice] = useState('')
+      const [busy, setBusy] = useState(false)
+      // 设置卡的草稿 / 原生对话框状态 / 保存结果 / 「选择并打开」最近一次选中的路径
+      const [draft, setDraft] = useState(null)
+      const [pickBusy, setPickBusy] = useState('')
+      const [saving, setSaving] = useState(false)
+      const [cfgNotice, setCfgNotice] = useState('')
+      const [pickedInfo, setPickedInfo] = useState(null)
+      const paths = status && status.paths ? status.paths : {}
+
+      const load = useCallback(async (options = {}) => {
+        const silent = options && options.silent === true
+        try {
+          const response = await fetch(HH + '/status', {
+            headers: { accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          })
+          if (!response.ok) {
+            throw new Error(response.status === 404 ? '插件未加载（/habit-hint/api 返回 404）' : 'HTTP ' + response.status)
+          }
+          setStatus(await unwrap(response))
+          setError('')
+        } catch (caught) {
+          setError(String(caught && caught.message ? caught.message : caught))
+          if (!silent) setNotice('')
+        }
+      }, [])
+
+      useEffect(() => {
+        load()
+      }, [load])
+      // 训练/提示状态大概几秒才变一次，5 秒静默轮询就够，不打扰正在看的人
+      useEffect(() => {
+        const timer = setInterval(() => { load({ silent: true }) }, 5000)
+        return () => clearInterval(timer)
+      }, [load])
+
+      const enabled = !!(status && status.enabled !== false)
+      const toggle = useCallback(async (next) => {
+        if (busy) return
+        setBusy(true)
+        try {
+          const response = await fetch(HH + '/enabled', {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ enabled: next }),
+          })
+          const value = await unwrap(response)
+          const saved = value && typeof value.enabled === 'boolean' ? value.enabled : next
+          setStatus((prev) => (prev ? { ...prev, enabled: saved } : prev))
+          setError('')
+          setNotice(saved
+            ? '已启用：下一轮开始照常注入提示（推理进程按需启动）'
+            : '已停用：不再注入提示，推理进程已停掉（设置已存到 plugin-settings.json）')
+        } catch (caught) {
+          setNotice('切换失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setBusy(false)
+        }
+      }, [busy])
+
+      const hhPost = useCallback((path, body) => fetch(HH + path, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(body || {}),
+      }).then(unwrap), [])
+
+      /** 一键打开文件/文件夹（mode=reveal：文件在资源管理器里高亮）。 */
+      const openPath = useCallback(async (path, mode) => {
+        if (!path) {
+          setNotice('这个路径还没配置，先在「设置」里选一下')
+          return
+        }
+        try {
+          const value = await hhPost('/open', { path, mode: mode || 'open' })
+          setNotice('已打开' + (value && value.kind === 'folder' ? '文件夹' : '文件') + '：' + ((value && value.path) || path))
+        } catch (caught) {
+          setNotice('打开失败：' + String(caught && caught.message ? caught.message : caught))
+        }
+      }, [hhPost])
+
+      /** 窗口顶部的「选择文件夹 / 选择文件」：只选路径，不自动打开（自动弹窗用户觉得多余）。 */
+      const pickAndOpen = useCallback(async (kind) => {
+        if (pickBusy !== '') return
+        setPickBusy('pick-open-' + kind)
+        setNotice('')
+        try {
+          const initial = kind === 'folder' ? String(paths.adapterRoot || '') : String(paths.pythonPath || '')
+          const value = await hhPost('/pick', { kind, initial })
+          const picked = value && typeof value.path === 'string' ? value.path : ''
+          if (picked === '') {
+            setNotice('已取消（没有选中' + (kind === 'folder' ? '文件夹' : '文件') + '）')
+            return
+          }
+          setPickedInfo({ path: picked, kind })
+          setNotice('已选择' + (kind === 'folder' ? '文件夹' : '文件') + '：' + picked + '（要打开就点下面的「打开」按钮）')
+        } catch (caught) {
+          setNotice('选择失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setPickBusy('')
+        }
+      }, [hhPost, paths.adapterRoot, paths.pythonPath, pickBusy])
+
+      /** 弹 Windows 原生对话框选文件/文件夹：只回填到设置草稿，不自动打开。 */
+      const pickPath = useCallback(async (kind, field, initial, filter) => {
+        if (pickBusy !== '') return
+        setPickBusy(field)
+        setCfgNotice('正在弹出选择框…')
+        try {
+          const value = await hhPost('/pick', { kind, initial: initial || '', filter: filter || '' })
+          const picked = value && typeof value.path === 'string' ? value.path : ''
+          if (picked === '') {
+            setCfgNotice('取消选择（没有选中路径）')
+            return
+          }
+          setDraft((prev) => ({ ...(prev || {}), [field]: picked }))
+          setCfgNotice('已选择：' + picked + ' —— 记得点「保存并应用」')
+        } catch (caught) {
+          setCfgNotice('选择路径失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setPickBusy('')
+        }
+      }, [hhPost, pickBusy])
+
+      const saveConfig = useCallback(async () => {
+        if (saving || !draft) return
+        setSaving(true)
+        setCfgNotice('')
+        try {
+          const value = await hhPost('/config', {
+            modelPath: draft.modelPath || '',
+            adapterRoot: draft.adapterRoot || '',
+            pythonPath: draft.pythonPath || '',
+          })
+          setStatus((prev) => (prev ? {
+            ...prev,
+            paths: {
+              ...(prev.paths || {}),
+              modelPath: value.modelPath,
+              adapterRoot: value.adapterRoot,
+              pythonPath: value.pythonPath,
+            },
+          } : prev))
+          setCfgNotice('已保存并应用：' + ((value && value.settingsPath) || 'plugin-settings.json') + '（旧推理进程已停，下次推理用新路径）')
+          void load({ silent: true })
+        } catch (caught) {
+          setCfgNotice('保存失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setSaving(false)
+        }
+      }, [draft, hhPost, load, saving])
+
+      // 设置草稿：第一次拿到 status 时用当前路径填一次，之后以用户编辑为准
+      useEffect(() => {
+        if (!status || !status.paths) return
+        setDraft((prev) => prev || {
+          modelPath: status.paths.modelPath || '',
+          adapterRoot: status.paths.adapterRoot || '',
+          pythonPath: status.paths.pythonPath || '',
+        })
+      }, [status])
+
+      const card = (title, badge, ...children) => h('section', { className: 'cm-app-card', key: title },
+        h('div', { className: 'cm-app-card-head' }, h('h3', null, title), badge ? h('span', { className: 'cm-muted' }, badge) : null),
+        ...children,
+      )
+      const kvRow = (key, label, value) => h('div', { key, className: 'cm-kv-row' }, h('dt', null, label), h('dd', null, value))
+      const listText = (list) => (Array.isArray(list) && list.length > 0 ? list.join('；') : '—')
+      const ratio = (value) => {
+        const num = Number(value)
+        if (!Number.isFinite(num)) return '—'
+        return (Math.round(num * 1000) / 10) + '%'
+      }
+
+      /** 统一「打开」按钮：文件夹用 📂、文件用 📄，样式与参考音库 / QQ 表情包一致。 */
+      const openButton = (label, path, mode, title) => h('button', {
+        key: 'open-' + label,
+        className: 'cm-btn cm-btn-small',
+        type: 'button',
+        disabled: !path,
+        title: path ? (title || ('打开：' + path)) : '还没有配置这个路径',
+        onClick: () => openPath(path, mode || 'open'),
+      }, label)
+      /** 路径行：保留 code 原文 + 后面的「打开文件夹 / 打开文件」按钮。 */
+      const pathRow = (key, label, path, kind) => h('div', { key, className: 'cm-kv-row' },
+        h('dt', null, label),
+        h('dd', null,
+          h('code', { className: 'cm-int-path', style: { display: 'inline-block', marginRight: '8px', maxWidth: '100%' } }, path || '—'),
+          path
+            ? h('span', { style: { display: 'inline-flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' } },
+                openButton(kind === 'folder' ? '打开文件夹' : '打开文件', path, 'open'),
+                kind === 'file' ? openButton('打开所在文件夹', path, 'reveal') : null,
+              )
+            : null,
+        ),
+      )
+      /** 设置卡的一行：输入框 + 原生对话框按钮 + 打开按钮。 */
+      const settingRow = (label, field, kind) => h('div', { key: field, style: { marginTop: '8px' } },
+        h('label', { className: 'cm-hint' }, label),
+        h('div', { className: 'cm-qq-form' },
+          h('input', {
+            className: 'cm-input',
+            style: { flex: '1 1 260px', minWidth: '200px' },
+            type: 'text',
+            spellCheck: false,
+            value: draft && typeof draft[field] === 'string' ? draft[field] : '',
+            placeholder: kind === 'folder' ? 'D:\\...\\文件夹' : 'D:\\...\\python.exe',
+            onChange: (event) => setDraft((prev) => ({ ...(prev || {}), [field]: event.target.value })),
+          }),
+          h('button', {
+            className: 'cm-btn cm-btn-small',
+            type: 'button',
+            disabled: pickBusy !== '',
+            onClick: () => pickPath(kind, field, draft && draft[field], kind === 'file' ? '程序 (*.exe)|*.exe|所有文件 (*.*)|*.*' : ''),
+          }, pickBusy === field ? '对话框已打开…' : (kind === 'folder' ? '选择文件夹…' : '选择文件…')),
+          h('button', {
+            className: 'cm-btn cm-btn-small',
+            type: 'button',
+            onClick: () => openPath(draft && draft[field], 'open'),
+          }, kind === 'folder' ? '打开文件夹' : '打开文件'),
+        ),
+      )
+
+      const counter = status && status.counter ? status.counter : null
+      const adapter = status && status.adapter ? status.adapter : null
+      const metrics = adapter && adapter.metrics && typeof adapter.metrics === 'object' ? adapter.metrics : null
+      const lastHints = status && status.lastHints ? status.lastHints : null
+      const trigger = counter && Number(counter.trigger) > 0 ? Number(counter.trigger) : 500
+      const count = counter && Number(counter.count) > 0 ? Number(counter.count) : 0
+      const percent = Math.max(0, Math.min(100, Math.round((count / Math.max(1, trigger)) * 100)))
+
+      const errorCard = error
+        ? h(
+            'section',
+            { className: 'cm-app-card' },
+            h('div', { className: 'cm-app-card-head' }, h('h3', null, '插件未加载 / 未响应')),
+            h('p', { className: 'cm-hint cm-banner-error' }, '读不到 /habit-hint/api/status：' + error),
+            h('p', { className: 'cm-hint' }, '先确认「接入软件」里「习惯提示小模型」的插件开关是开的；如果刚重载过插件，等一两秒再点重试。'),
+            h('div', { className: 'cm-qq-form' },
+              h('button', { className: 'cm-btn cm-btn-small cm-btn-primary', type: 'button', onClick: () => { setError(''); void load() } }, '重试'),
+            ),
+          )
+        : null
+
+      return h(
+        UnifiedAppPage,
+        { item: item || { name: '习惯提示小模型' }, appId: 'habit-hint', enabled, onToggle: toggle, onBack },
+        errorCard,
+        notice ? h('p', { className: 'cm-hint' }, notice) : null,
+        card('选择（文件 / 文件夹）', '只选路径，不会自动打开',
+          h('p', { className: 'cm-hint' }, '点下面的按钮弹 Windows 原生对话框：选文件夹 / 选文件只把路径带回来，不会自动打开；要打开再点下面的「打开」按钮。'),
+          h('div', { className: 'cm-qq-form' },
+            h('button', {
+              className: 'cm-btn',
+              type: 'button',
+              disabled: pickBusy !== '',
+              onClick: () => pickAndOpen('folder'),
+            }, pickBusy === 'pick-open-folder' ? '对话框已打开…' : '选择文件夹'),
+            h('button', {
+              className: 'cm-btn',
+              type: 'button',
+              disabled: pickBusy !== '',
+              onClick: () => pickAndOpen('file'),
+            }, pickBusy === 'pick-open-file' ? '对话框已打开…' : '选择文件'),
+          ),
+          pickedInfo
+            ? h('div', { className: 'cm-qq-form', style: { marginTop: '6px' } },
+                h('code', { className: 'cm-int-path', style: { display: 'inline-block', marginRight: '8px', maxWidth: '100%' } }, pickedInfo.path),
+                h('button', {
+                  className: 'cm-btn cm-btn-small',
+                  type: 'button',
+                  onClick: () => openPath(pickedInfo.path, 'open'),
+                }, '打开'),
+                h('button', {
+                  className: 'cm-btn cm-btn-small',
+                  type: 'button',
+                  onClick: () => {
+                    try { if (navigator.clipboard) navigator.clipboard.writeText(pickedInfo.path) } catch { /* ignore */ }
+                    setNotice('已复制路径：' + pickedInfo.path)
+                  },
+                }, '复制路径'),
+              )
+            : null,
+          h('p', { className: 'cm-hint' }, '选过的路径 5 分钟内可以直接再打开；其它路径仍受安全白名单限制。'),
+        ),
+        card('训练进度', counter ? ('已积累 ' + count + ' / ' + trigger + ' 轮') : '读取中…',
+          h('p', { className: 'cm-hint' }, '每完成一轮对话计数 +1，攒够 ' + trigger + ' 轮就自动拉起一次 LoRA 训练（后台进程，训完自己退出）；不够就不训，聊天不受影响。'),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', margin: '8px 0 2px' } },
+            h('div', { style: { flex: '1 1 auto', height: '8px', borderRadius: '999px', background: 'var(--cm-surface-2, rgba(15, 23, 42, 0.06))', overflow: 'hidden' } },
+              h('div', { style: { width: percent + '%', height: '100%', borderRadius: '999px', background: 'var(--cm-brand, #2f6bff)', transition: 'width 200ms ease' } }),
+            ),
+            h('span', { className: 'cm-muted' }, percent + '%'),
+          ),
+          h('dl', { className: 'cm-kv' },
+            kvRow('counter-count', '已积累对话', counter ? (count + ' / ' + trigger + ' 轮') : '—'),
+            kvRow('counter-since', '本轮计数起点', counter && counter.since ? formatStamp(counter.since) : '—'),
+            kvRow('counter-updated', '最近一次计数', counter && counter.updatedAt ? formatStamp(counter.updatedAt) : '—'),
+            kvRow('train-last-samples', '已训练样本数', adapter && adapter.samples !== null && adapter.samples !== undefined ? (adapter.samples + ' 条') : '—'),
+            kvRow('train-last-at', '上次训练 / 上线时间', adapter && adapter.trainedAt ? formatStamp(adapter.trainedAt) : '—'),
+          ),
+          h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+            openButton('打开数据文件夹', paths.dataDir, 'open', '打开训练数据目录 D:\\AI\\习惯模型\\data'),
+            openButton('打开计数文件', paths.counterPath, 'open'),
+            openButton('打开日志', paths.logPath, 'open'),
+            openButton('打开实时轮次文件', paths.liveTurnsPath, 'open'),
+          ),
+        ),
+        card('当前模型', adapter ? 'LoRA adapter' : '还没有可用 adapter',
+          adapter
+            ? h('dl', { className: 'cm-kv' },
+                kvRow('adapter-id', 'adapter 版本', adapter.id || '—'),
+                pathRow('adapter-path', 'adapter 路径', adapter.path || '', 'folder'),
+                kvRow('adapter-trained', '训练 / 上线时间', adapter.trainedAt ? formatStamp(adapter.trainedAt) : '—'),
+                kvRow('adapter-samples', '训练样本数', adapter.samples !== null && adapter.samples !== undefined ? (adapter.samples + ' 条') : '—'),
+                kvRow('adapter-available', '模型目录', adapter.available ? '可用' : '目录缺失（请重新放置模型）'),
+              )
+            : h(
+                'div',
+                null,
+                h('p', { className: 'cm-hint' }, '没读到 adapters/current.json，或者指向的 adapter 目录不存在；插件会静默跳过推理（聊天不受影响）。'),
+                h('p', { className: 'cm-hint' }, '检查 D:\\AI\\习惯模型\\adapters\\current.json 里的 adapter 路径。'),
+              ),
+          metrics
+            ? h('dl', { className: 'cm-kv' },
+                kvRow('m-json', 'JSON 合法率', ratio(metrics.json_valid_rate)),
+                kvRow('m-habits', '习惯非空率', ratio(metrics.habits_nonempty_rate)),
+                kvRow('m-important', '重点非空率', ratio(metrics.important_nonempty_rate)),
+                kvRow('m-hints', '提示非空率', ratio(metrics.hints_nonempty_rate)),
+                kvRow('m-recall', '习惯召回（模糊）', ratio(metrics.habit_recall_fuzzy)),
+                kvRow('m-n', '评测样本', metrics.n !== undefined && metrics.n !== null ? (metrics.n + ' 条') : '—'),
+              )
+            : null,
+          h('dl', { className: 'cm-kv' },
+            pathRow('model-path', '模型目录', paths.modelPath, 'folder'),
+            pathRow('adapter-root', '适配器目录', paths.adapterRoot, 'folder'),
+            pathRow('adapter-current', 'adapter 指针（current.json）', paths.adapterCurrentFile, 'file'),
+            pathRow('python-path', 'Python 路径', paths.pythonPath, 'file'),
+          ),
+        ),
+        card('最近一次提示', lastHints && lastHints.at ? '生成于 ' + formatStamp(lastHints.at) : '还没有生成过',
+          lastHints
+            ? h('dl', { className: 'cm-kv' },
+                kvRow('h-habits', '习惯', listText(lastHints.habits)),
+                kvRow('h-important', '重点', listText(lastHints.important)),
+                kvRow('h-hints', '提示语', listText(lastHints.hints)),
+                kvRow('h-at', '时间', lastHints.at ? formatStamp(lastHints.at) : '—'),
+              )
+            : h('p', { className: 'cm-hint' }, '还没有生成过提示：要有开了伴侣记忆的对话聊够几轮（每几个 AI 回合跑一次小模型）才会出第一条。生成后这里会显示习惯 / 重点 / 提示语。'),
+        ),
+        card('设置', draft ? '改完点保存' : '读取中…',
+          h('p', { className: 'cm-hint' }, '这三项决定小模型怎么跑。每个输入框右边可以直接弹 Windows 原生对话框选路径；换完点「保存并应用」，下次推理就用新路径（会先停掉旧的推理进程）。'),
+          settingRow('模型目录（Qwen3-0.6B 基座）', 'modelPath', 'folder'),
+          settingRow('适配器目录（current.json 所在）', 'adapterRoot', 'folder'),
+          settingRow('Python 路径（带 torch / transformers / peft 的解释器）', 'pythonPath', 'file'),
+          cfgNotice ? h('p', { className: 'cm-hint' }, cfgNotice) : null,
+          h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+            h('button', { className: 'cm-btn cm-btn-small cm-btn-primary', type: 'button', disabled: saving || pickBusy !== '', onClick: saveConfig }, saving ? '保存中…' : '保存并应用'),
+            openButton('打开设置文件', paths.settingsPath, 'open'),
+            paths.settingsPath ? h('span', { className: 'cm-hint' }, '写入：' + paths.settingsPath) : null,
+          ),
+        ),
+        card('说明', null,
+          h('p', { className: 'cm-hint' }, '右上角开关 = 插件自己的启用/停用（写进 D:\\AI\\习惯模型\\data\\plugin-settings.json，重载插件后仍然记得）：'),
+          h('p', { className: 'cm-hint' }, '· 关：不再往系统提示词里注入「习惯提示」，并立刻停掉 Python 推理进程；'),
+          h('p', { className: 'cm-hint' }, '· 开：恢复注入，下一次需要出提示时按需重新拉起推理进程。'),
+          h('p', { className: 'cm-hint' }, '「接入软件」卡片上的大开关控制的是插件整体加载/卸载，两个开关是分开的。'),
+          h('p', { className: 'cm-hint' }, '路径控件是统一的：每行路径都有「打开文件夹 / 打开文件」，设置卡里的「选择文件夹… / 选择文件…」会弹 Windows 原生对话框；以后插件在 status 里返回 openables，就自动有同一套按钮。'),
+          h('p', { className: 'cm-hint' }, '这个窗口由 AI记忆 自带承载：插件清单里只写 app / statusUrl / enabledUrl，打开就是统一页面，不用各做各的界面。'),
+        ),
+      )
+    }
+
+    /**
+     * 通用插件应用页：清单里带 statusUrl 的插件（没写专属界面）自动走这个统一窗口。
+     * 以后新插件只要在清单里写 app / statusUrl / enabledUrl 三样，不用改 client.js 就有：
+     * 说明 + 能力 + 状态键值对 + 总开关；接口读不到就显示「未加载/未响应」+ 重试，不白屏。
+     */
+    function PluginAppPage(props) {
+      const { appId, item, onBack } = props
+      const info = item || { name: appId || '应用' }
+      const statusUrl = typeof info.statusUrl === 'string' ? info.statusUrl : ''
+      const enabledUrl = typeof info.enabledUrl === 'string' ? info.enabledUrl : ''
+      // 「打开」接口：清单可显式写 openUrl，否则按 statusUrl 把结尾 /status 换成 /open
+      const openUrl = typeof info.openUrl === 'string' && info.openUrl !== ''
+        ? info.openUrl
+        : (statusUrl !== '' ? statusUrl.replace(/\/status\/?$/, '/open') : '')
+      const [state, setState] = useState(null)
+      const [error, setError] = useState('')
+      const [notice, setNotice] = useState('')
+      const [busy, setBusy] = useState(false)
+
+      const load = useCallback(async (options = {}) => {
+        const silent = options && options.silent === true
+        if (statusUrl === '') {
+          setError('这份清单没有写 statusUrl，读不到插件状态')
+          return
+        }
+        try {
+          const response = await fetch(statusUrl, {
+            headers: { accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          })
+          if (!response.ok) {
+            throw new Error(response.status === 404 ? '插件未加载（接口 404）' : 'HTTP ' + response.status)
+          }
+          setState(await unwrap(response))
+          setError('')
+        } catch (caught) {
+          setError(String(caught && caught.message ? caught.message : caught))
+          if (!silent) setNotice('')
+        }
+      }, [statusUrl])
+
+      useEffect(() => {
+        load()
+      }, [load])
+      useEffect(() => {
+        const timer = setInterval(() => { load({ silent: true }) }, 5000)
+        return () => clearInterval(timer)
+      }, [load])
+
+      const enabled = state && typeof state.enabled === 'boolean' ? state.enabled : info.enabled !== false
+      const toggle = useCallback(async (next) => {
+        if (busy) return
+        setBusy(true)
+        try {
+          let saved = next
+          if (enabledUrl !== '') {
+            const response = await fetch(enabledUrl, {
+              method: 'POST',
+              headers: { accept: 'application/json', 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ enabled: next }),
+            })
+            const value = await unwrap(response)
+            if (value && typeof value.enabled === 'boolean') saved = value.enabled
+          } else {
+            const value = await apiPost('/integrations/state', { id: info.id || appId, enabled: next })
+            if (value && typeof value.enabled === 'boolean') saved = value.enabled
+          }
+          setState((prev) => ({ ...(prev || {}), enabled: saved }))
+          setNotice(saved ? '已开启' : '已关闭（插件已记住）')
+        } catch (caught) {
+          setNotice('切换失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setBusy(false)
+        }
+      }, [appId, busy, enabledUrl, info.id])
+
+      /** 通用「打开」：POST {openUrl} {path}；插件在 status 里返回 openables 或路径字符串就能用。 */
+      const openGenericPath = useCallback(async (path) => {
+        if (!path || openUrl === '') return
+        try {
+          const response = await fetch(openUrl, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+            body: JSON.stringify({ path }),
+          })
+          const value = await unwrap(response)
+          setNotice('已打开' + (value && value.kind === 'folder' ? '文件夹' : '文件') + '：' + ((value && value.path) || path))
+        } catch (caught) {
+          setNotice('打开失败：' + String(caught && caught.message ? caught.message : caught))
+        }
+      }, [openUrl])
+
+      // 状态键值对：只显示基础类型，复杂对象给摘要，随时不会白屏；路径字符串额外给「打开」按钮
+      const pairs = []
+      if (state && typeof state === 'object' && !Array.isArray(state)) {
+        for (const key of Object.keys(state)) {
+          if (key === 'enabled' || key === 'openables') continue
+          const value = state[key]
+          if (value === null || value === undefined) pairs.push([key, '—', ''])
+          else if (typeof value === 'string') {
+            const shown = value.length > 90 ? value.slice(0, 90) + '…' : value
+            pairs.push([key, shown, /^[A-Za-z]:[\\/]/.test(value) ? value : ''])
+          } else if (typeof value === 'number' || typeof value === 'boolean') pairs.push([key, String(value), ''])
+          else if (Array.isArray(value)) pairs.push([key, value.length + ' 项', ''])
+          else pairs.push([key, '…', ''])
+        }
+      }
+      const openables = state && Array.isArray(state.openables)
+        ? state.openables.filter((entry) => entry && typeof entry.path === 'string' && entry.path !== '')
+        : []
+
+      return h(
+        UnifiedAppPage,
+        { item: info, appId, enabled, onToggle: toggle, onBack },
+        error
+          ? h(
+              'section',
+              { className: 'cm-app-card' },
+              h('div', { className: 'cm-app-card-head' }, h('h3', null, '插件未加载 / 未响应')),
+              h('p', { className: 'cm-hint cm-banner-error' }, '读取 ' + statusUrl + ' 失败：' + error),
+              h('p', { className: 'cm-hint' }, '确认这个插件是开启状态；如果刚重载过插件，等一两秒再点重试。'),
+              h('div', { className: 'cm-qq-form' },
+                h('button', { className: 'cm-btn cm-btn-small cm-btn-primary', type: 'button', onClick: () => { setError(''); void load() } }, '重试'),
+              ),
+            )
+          : null,
+        notice ? h('p', { className: 'cm-hint' }, notice) : null,
+        h(
+          'section',
+          { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '说明')),
+          h('p', { className: 'cm-hint' }, info.description || '这个应用还没有写说明。'),
+          info.hint ? h('p', { className: 'cm-hint' }, info.hint) : null,
+          info.author ? h('p', { className: 'cm-hint' }, '作者：' + info.author) : null,
+          h('p', { className: 'cm-hint' }, '这个窗口由 AI记忆 统一提供（说明 / 能力 / 状态 / 开关），插件清单里写 app、statusUrl、enabledUrl 就行。'),
+        ),
+        Array.isArray(info.capabilities) && info.capabilities.length > 0
+          ? h(
+              'section',
+              { className: 'cm-app-card' },
+              h('div', { className: 'cm-app-card-head' }, h('h3', null, '能力')),
+              h('ul', { className: 'cm-qq-members' }, info.capabilities.map((cap) => h('li', { key: cap, className: 'cm-qq-member' }, h('span', null, cap)))),
+            )
+          : null,
+        h(
+          'section',
+          { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '状态')),
+          pairs.length === 0
+            ? h('p', { className: 'cm-hint' }, error ? '接口还没通，暂时读不到状态。' : '这个插件还没有提供状态字段。')
+            : h('dl', { className: 'cm-kv' }, pairs.map(([key, value, pathValue]) => h('div', { key, className: 'cm-kv-row' },
+                h('dt', null, key),
+                h('dd', null,
+                  value,
+                  pathValue
+                    ? h('button', {
+                        className: 'cm-btn cm-btn-small',
+                        type: 'button',
+                        style: { marginLeft: '8px' },
+                        title: '打开：' + pathValue,
+                        onClick: () => openGenericPath(pathValue),
+                      }, '打开')
+                    : null,
+                ),
+              ))),
+        ),
+        openables.length > 0
+          ? h(
+              'section',
+              { className: 'cm-app-card' },
+              h('div', { className: 'cm-app-card-head' }, h('h3', null, '打开（文件 / 文件夹）'), h('span', { className: 'cm-muted' }, openables.length + ' 项')),
+              h('div', { className: 'cm-qq-form' },
+                openables.map((entry) => h('button', {
+                  key: 'openable-' + (entry.label || entry.path),
+                  className: 'cm-btn cm-btn-small',
+                  type: 'button',
+                  disabled: entry.exists === false,
+                  title: entry.exists === false ? '路径不存在：' + entry.path : entry.path,
+                  onClick: () => openGenericPath(entry.path),
+                }, (entry.kind === 'folder' ? '打开文件夹：' : '打开文件：') + (entry.label || entry.path))),
+              ),
+              h('p', { className: 'cm-hint' }, '这些按钮来自插件 status 里的 openables：以后插件只要返回 openables，就自动有同一套「打开」控件，客户端不用改。'),
+            )
+          : null,
+        h(
+          'section',
+          { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '开关')),
+          h('p', { className: 'cm-hint' }, '右上角开关调用插件的 ' + (enabledUrl !== '' ? enabledUrl : '/companion/api/integrations/state') + '；关掉后插件不再生效，配置和记录都留着。'),
+          openUrl !== '' ? h('p', { className: 'cm-hint' }, '「打开」按钮调用 ' + openUrl + '（由 statusUrl 推导，也可以在清单里写 openUrl）。') : null,
+        ),
+      )
+    }
+
     function BuiltinAppView(props) {
       const { appId, item, onBack } = props
       if (appId === 'qqbot') return h(QqbotBuiltinApp, { onBack })
       if (appId === 'ai-voice') return h(AiVoiceBuiltinApp, { onBack })
-      // 其它应用：插件自带统一页面（说明 + 能力 + 开关），以后装进来也长这样
+      if (appId === 'habit-hint') return h(HabitHintBuiltinApp, { item, onBack })
+      // 其它插件：清单里带 statusUrl 的都走统一窗口（说明/能力/状态/开关）
+      if (item && typeof item.statusUrl === 'string' && item.statusUrl !== '') return h(PluginAppPage, { appId, item, onBack })
+      // 连状态接口都没写的：插件自带统一页面（说明 + 能力 + 开关），以后装进来也长这样
       return h(DefaultAppPage, { appId, item, onBack })
+    }
+
+    /** 「从 GitHub 获取插件」卡片：看版本/说明，直接下载（只下载不安装），或打开详情。 */
+    function GitHubPluginCard(props) {
+      const item = props.item || {}
+      const repoName = (item.owner || '') + '/' + (item.repo || '')
+      const downloadUrl = typeof item.downloadUrl === 'string' && item.downloadUrl !== '' ? item.downloadUrl : (item.homepage || '')
+      const versionText = item.version ? 'GitHub ' + item.version : 'GitHub 暂无 Release'
+      return h(
+        'article',
+        { className: 'cm-int-card' },
+        h(
+          'div',
+          { className: 'cm-int-card-head' },
+          h('h3', { className: 'cm-int-card-name' }, item.name || item.repo || 'GitHub 插件'),
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexShrink: 0 } },
+            h('span', { className: 'cm-int-card-ver' }, versionText),
+            item.homepage
+              ? h('a', { className: 'cm-int-link', style: { marginLeft: '0' }, href: item.homepage, target: '_blank', rel: 'noreferrer noopener' }, '主页 ↗')
+              : null,
+          ),
+        ),
+        h(
+          'div',
+          { className: 'cm-int-tags' },
+          h('span', { className: 'cm-int-tag cm-int-tag-strong' }, 'GitHub'),
+          h('span', { className: 'cm-int-tag' }, repoName),
+          item.localVersion
+            ? h('span', { className: 'cm-int-tag' }, '本机已装 v' + item.localVersion)
+            : h('span', { className: 'cm-int-tag' }, '本机未安装'),
+        ),
+        h('p', { className: 'cm-int-card-desc' }, item.intro || item.description || '（这个插件还没写中文简介）'),
+        item.error ? h('p', { className: 'cm-hint cm-banner-error' }, '读取这个仓库失败：' + item.error) : null,
+        h(
+          'div',
+          { className: 'cm-int-card-foot' },
+          h('span', { className: 'cm-muted', style: { whiteSpace: 'nowrap' } }, item.publishedAt ? '发布 ' + formatStamp(item.publishedAt) : ''),
+          h(
+            'div',
+            { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+            h('a', {
+              className: 'cm-btn cm-btn-small cm-btn-primary',
+              href: downloadUrl,
+              target: '_blank',
+              rel: 'noreferrer noopener',
+              download: '',
+              title: item.hasRelease ? '下载 GitHub Release 资产' : '下载 main 分支源码 zip',
+            }, '下载'),
+            h('button', {
+              className: 'cm-btn cm-btn-small',
+              type: 'button',
+              onClick: () => props.onOpen && props.onOpen(item.id),
+            }, '打开'),
+          ),
+        ),
+      )
+    }
+
+    /** GitHub 插件详情页：说明 / 版本对比 / 发布说明 / 资产列表 / 安装提示（只下载，不自动安装）。 */
+    function GithubPluginPage(props) {
+      const { item, onBack } = props
+      if (!item) {
+        return h(
+          UnifiedAppPage,
+          { item: { name: 'GitHub 插件' }, appId: 'github', enabled: true, onBack, showSwitch: false },
+          h('p', { className: 'cm-hint' }, '这条 GitHub 信息不在了，返回后点「重新读取」再试一次。'),
+        )
+      }
+      const assets = Array.isArray(item.assets) ? item.assets : []
+      const local = item.localVersion || ''
+      const compare = (() => {
+        if (!item.version || !local) return ''
+        const a = item.version.replace(/^v/i, '').split('.').map((part) => Number(part) || 0)
+        const b = local.replace(/^v/i, '').split('.').map((part) => Number(part) || 0)
+        for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+          const x = a[index] || 0
+          const y = b[index] || 0
+          if (x > y) return 'GitHub 上的版本比本机新'
+          if (x < y) return '本机版本比 GitHub 上的新'
+        }
+        return '与本机版本相同'
+      })()
+      const card = (title, badge, ...children) => h('section', { className: 'cm-app-card', key: title },
+        h('div', { className: 'cm-app-card-head' }, h('h3', null, title), badge ? h('span', { className: 'cm-muted' }, badge) : null),
+        ...children,
+      )
+      const sizeText = (size) => {
+        const num = Number(size) || 0
+        if (num <= 0) return '大小未知'
+        if (num < 1024) return num + ' B'
+        if (num < 1024 * 1024) return Math.round(num / 1024) + ' KB'
+        return (num / 1024 / 1024).toFixed(1) + ' MB'
+      }
+      const row = (key, label, value) => h('div', { key, className: 'cm-kv-row' }, h('dt', null, label), h('dd', null, value))
+      return h(
+        UnifiedAppPage,
+        { item: { name: item.name || item.repo }, appId: 'github', enabled: true, onBack, showSwitch: false },
+        card('简介', item.version ? 'GitHub ' + item.version : 'GitHub',
+          h('p', { className: 'cm-hint' }, item.intro || '（这个插件还没写中文简介）'),
+          item.description && item.description !== item.intro
+            ? h('p', { className: 'cm-hint', style: { opacity: 0.75 } }, '仓库说明（英文）：' + item.description)
+            : null,
+        ),
+        card('版本', item.version ? 'GitHub ' + item.version : '无 Release',
+          h('dl', { className: 'cm-kv' },
+            row('gh-version', 'GitHub 最新版本', item.version || '（这个仓库还没发 Release）'),
+            row('gh-published', '发布时间', item.publishedAt ? formatStamp(item.publishedAt) : '—'),
+            row('gh-local', '本机已安装', local ? 'v' + local : '未安装'),
+            row('gh-repo', '仓库', h('a', { className: 'cm-int-link', style: { marginLeft: '0' }, href: item.homepage, target: '_blank', rel: 'noreferrer noopener' }, (item.owner || '') + '/' + (item.repo || '') + ' ↗')),
+          ),
+          compare ? h('p', { className: 'cm-hint' }, compare + (item.version && local && /本机版本比/.test(compare) ? '（本机更新，一般不用换）' : '')) : null,
+        ),
+        card('下载', item.hasRelease ? 'Release 资产' : 'GitHub 暂无 Release，下载 main 分支源码',
+          h('div', { className: 'cm-qq-form' },
+            h('a', { className: 'cm-btn cm-btn-small cm-btn-primary', href: item.downloadUrl, target: '_blank', rel: 'noreferrer noopener', download: '' }, '下载首选包'),
+            item.archiveUrl ? h('a', { className: 'cm-btn cm-btn-small', href: item.archiveUrl, target: '_blank', rel: 'noreferrer noopener', download: '' }, '下载源码 zip') : null,
+            item.homepage ? h('a', { className: 'cm-btn cm-btn-small', href: item.homepage, target: '_blank', rel: 'noreferrer noopener' }, '打开 GitHub 主页 ↗') : null,
+          ),
+          assets.length === 0
+            ? h('p', { className: 'cm-hint' }, '这个仓库没有 Release 资产；上面「下载首选包」就是分支源码 zip。')
+            : h('dl', { className: 'cm-kv' },
+                assets.map((asset, index) => h('div', { key: 'asset-' + index, className: 'cm-kv-row' },
+                  h('dt', null, asset.name),
+                  h('dd', null,
+                    sizeText(asset.size) + '　',
+                    h('a', { className: 'cm-int-link', style: { marginLeft: '0' }, href: asset.url, target: '_blank', rel: 'noreferrer noopener', download: '' }, '下载'),
+                  ),
+                )),
+              ),
+        ),
+        card('发布说明', item.publishedAt ? formatStamp(item.publishedAt) : '',
+          item.notes
+            ? h('div', { className: 'cm-hint', style: { whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.65', maxHeight: '380px', overflow: 'auto' } }, item.notes)
+            : h('p', { className: 'cm-hint' }, item.hasRelease ? '这个 Release 没写说明。' : 'GitHub 上没有 Release，所以没有发布说明；下载的是仓库当前源码。'),
+        ),
+        card('安装提示', '只下载，不会自动安装',
+          h('p', { className: 'cm-hint' }, '这里只负责从 GitHub 下载文件，不会执行、也不会自动安装；下载完你自己决定装不装。'),
+          h('p', { className: 'cm-hint' }, '· .tgz（npm 包）：用 DSH 插件市场的「从文件/链接安装」，或命令行 dsh plugin add <下载好的 tgz 绝对路径>。'),
+          h('p', { className: 'cm-hint' }, '· .zip / 源码 zip：解压后得到插件目录（含 package.json、cordis.patch.yml），放到固定位置，再用插件管理 install_bundle 指向该目录。'),
+          h('p', { className: 'cm-hint' }, '· 装之前先看上面「本机已安装」：本机比 GitHub 新就没必要换。'),
+        ),
+      )
     }
 
     function IntegrationCard(props) {
       const item = props.item
       const homepage = integrationHomepage(item)
+      // 默认打开：清单没写 openable:false 的都能点开；带 app / statusUrl 的插件型应用一律可打开
+      //（打开后即使插件没写专属界面，也会落到 AI记忆 的统一页面，不会白屏）
+      const openable = item.openable !== false
+        || (typeof item.app === 'string' && item.app !== '')
+        || (typeof item.statusUrl === 'string' && item.statusUrl !== '')
       return h(
         'article',
         { className: 'cm-int-card' },
@@ -5354,7 +6122,7 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'cm-switch-text' }, (item.name || '应用') + '：' + (props.appEnabled ? '开' : '关')),
               )
             : null,
-          item.openable !== false
+          openable
             ? (() => {
                 const blocked = props.pluginBacked && props.appEnabled !== true
                 return h(
@@ -5411,6 +6179,13 @@ window.__ModuleLoader__.load({
       const pendingAppToggles = useRef({})
       // 通用应用开关状态：清单里带 statusUrl 的应用自动读取（以后新应用也走这里）
       const [appStates, setAppStates] = useState({})
+      // 「从 GitHub 获取插件」：目录数据 / 加载中 / 错误 / 当前打开的详情 id
+      const [githubCatalog, setGithubCatalog] = useState(null)
+      const [githubLoading, setGithubLoading] = useState(false)
+      const [githubError, setGithubError] = useState('')
+      const [openGithub, setOpenGithub] = useState('')
+      // 子页签：'discover'（发现：只放收录的 GitHub 插件） / 'installed'（已安装：自带 + 外部清单）
+      const [subTab, setSubTab] = useState('discover')
 
       const load = useCallback(async () => {
         setBusy(true)
@@ -5488,6 +6263,37 @@ window.__ModuleLoader__.load({
         const timer = setInterval(loadAppPlugins, 5000)
         return () => clearInterval(timer)
       }, [loadAppPlugins])
+
+      /** 「从 GitHub 获取插件」目录：进页面读一次（Host 侧 10 分钟缓存，不频繁打 GitHub API）。 */
+      const loadGithubCatalog = useCallback(async () => {
+        setGithubLoading(true)
+        setGithubError('')
+        try {
+          const value = await apiGet('/github/catalog')
+          setGithubCatalog(value && typeof value === 'object' ? value : null)
+          if (value && typeof value.error === 'string' && value.error !== '') setGithubError(value.error)
+        } catch (caught) {
+          setGithubCatalog(null)
+          setGithubError(String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setGithubLoading(false)
+        }
+      }, [])
+
+      useEffect(() => {
+        loadGithubCatalog()
+      }, [loadGithubCatalog])
+
+      /** 打开「已安装」应用的详情：记下来源页签，返回时回到「已安装」。 */
+      const openAppDetail = useCallback((appId) => {
+        setSubTab('installed')
+        setOpenApp(appId)
+      }, [])
+      /** 打开「发现」页的 GitHub 详情：返回时回到「发现」。 */
+      const openGithubDetail = useCallback((id) => {
+        setSubTab('discover')
+        setOpenGithub(id)
+      }, [])
 
       /** 每张卡片的开关状态：QQ / AI语音 走各自接口，其它应用读插件自己记住的状态。 */
       const appEnabledFor = useCallback((item) => {
@@ -5655,11 +6461,25 @@ window.__ModuleLoader__.load({
       }
       const filteredBuiltin = builtinItems.filter(match)
       const filtered = items.filter(match)
+      // GitHub 目录也跟随搜索框过滤（名称 / 仓库 / 说明 / 版本）
+      const githubItems = githubCatalog && Array.isArray(githubCatalog.items) ? githubCatalog.items : []
+      const filteredGithub = githubItems.filter((item) => {
+        if (tokens.length === 0) return true
+        const haystack = [item.name, item.repo, item.owner, item.description, item.version]
+          .filter((part) => typeof part === 'string')
+          .join(' ')
+          .toLowerCase()
+        return tokens.every((token) => haystack.includes(token))
+      })
 
-      const metaText =
-        tokens.length > 0
-          ? '自带 ' + filteredBuiltin.length + ' 个 · 外部 ' + filtered.length + ' 个（共匹配 ' + (filteredBuiltin.length + filtered.length) + ' 个）'
-          : '自带 ' + builtinItems.length + ' 个 · 外部已接入 ' + items.length + ' 个'
+      // 计数文案按当前子页签统计（搜索框只过滤当前页）
+      const metaText = subTab === 'discover'
+        ? (tokens.length > 0
+            ? '收录 ' + filteredGithub.length + ' 个（匹配「' + query.trim() + '」）'
+            : '收录 ' + githubItems.length + ' 个插件')
+        : (tokens.length > 0
+            ? '自带 ' + filteredBuiltin.length + ' 个 · 外部 ' + filtered.length + ' 个（共匹配 ' + (filteredBuiltin.length + filtered.length) + ' 个）'
+            : '自带 ' + builtinItems.length + ' 个 · 外部已接入 ' + items.length + ' 个')
 
       if (openApp !== '') {
         const allApps = [...(Array.isArray(builtinItems) ? builtinItems : []), ...items]
@@ -5667,10 +6487,38 @@ window.__ModuleLoader__.load({
         return h(BuiltinAppView, { appId: openApp, item: appItem, onBack: () => setOpenApp('') })
       }
 
+      if (openGithub !== '') {
+        const ghItems = githubCatalog && Array.isArray(githubCatalog.items) ? githubCatalog.items : []
+        const ghItem = ghItems.find((entry) => entry && entry.id === openGithub) || null
+        return h(GithubPluginPage, { item: ghItem, onBack: () => setOpenGithub('') })
+      }
+
       return h(
         'div',
         { className: 'cm-tab-body' },
         h(
+          'div',
+          { className: 'cm-tabs', style: { margin: '-6px 0 -2px', flexWrap: 'wrap' } },
+          h(
+            'button',
+            {
+              className: 'cm-tab' + (subTab === 'discover' ? ' cm-tab-active' : ''),
+              type: 'button',
+              onClick: () => setSubTab('discover'),
+            },
+            '发现',
+          ),
+          h(
+            'button',
+            {
+              className: 'cm-tab' + (subTab === 'installed' ? ' cm-tab-active' : ''),
+              type: 'button',
+              onClick: () => setSubTab('installed'),
+            },
+            '已安装',
+          ),
+        ),
+        subTab === 'installed' ? h(
           'div',
           { className: 'cm-int-topline', style: { margin: '0 0 -6px' } },
           h('span', { className: 'cm-int-topline-hint' }, '想让自己的软件也出现在这里？'),
@@ -5695,8 +6543,8 @@ window.__ModuleLoader__.load({
             },
             '申请收录软件 ↗',
           ),
-        ),
-        formOpen
+        ) : null,
+        subTab === 'installed' && formOpen
           ? h(
               'div',
                 {
@@ -5796,7 +6644,7 @@ window.__ModuleLoader__.load({
               className: 'cm-search-input',
               type: 'text',
               value: query,
-              placeholder: '搜索软件、通道或能力，例如：QQ、记忆…',
+              placeholder: subTab === 'discover' ? '搜索收录的插件，例如：语音、习惯…' : '搜索软件、通道或能力，例如：QQ、记忆…',
               onChange: (event) => setQuery(event.target.value),
             }),
             query !== ''
@@ -5807,11 +6655,20 @@ window.__ModuleLoader__.load({
                 )
               : null,
           ),
-          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy, onClick: load }, busy ? '刷新中…' : '刷新'),
+          h(
+            'button',
+            {
+              className: 'cm-btn cm-btn-small',
+              type: 'button',
+              disabled: busy || githubLoading,
+              onClick: subTab === 'discover' ? loadGithubCatalog : load,
+            },
+            (busy || githubLoading) ? '刷新中…' : '刷新',
+          ),
         ),
         h('p', { className: 'cm-int-meta' }, metaText),
-        error ? h('div', { className: 'cm-banner cm-banner-error' }, '读取清单失败：' + error) : null,
-        filteredBuiltin.length > 0
+        subTab === 'installed' && error ? h('div', { className: 'cm-banner cm-banner-error' }, '读取清单失败：' + error) : null,
+        subTab === 'installed' && filteredBuiltin.length > 0
           ? h(
               'div',
               { className: 'cm-int-section' },
@@ -5828,7 +6685,7 @@ window.__ModuleLoader__.load({
                   h(IntegrationCard, {
                     key: item.id,
                     item,
-                    onOpen: setOpenApp,
+                    onOpen: openAppDetail,
                     appEnabled: appEnabledFor(item),
                     onToggleApp: toggleApp,
                     pluginBacked: !!(item.id && appPlugins[item.id]),
@@ -5837,7 +6694,7 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
-        filtered.length > 0
+        subTab === 'installed' && filtered.length > 0
           ? h(
               'div',
               { className: 'cm-int-section' },
@@ -5854,7 +6711,7 @@ window.__ModuleLoader__.load({
                   h(IntegrationCard, {
                     key: item.id,
                     item,
-                    onOpen: setOpenApp,
+                    onOpen: openAppDetail,
                     appEnabled: appEnabledFor(item),
                     onToggleApp: toggleApp,
                     pluginBacked: !!(item.id && appPlugins[item.id]),
@@ -5863,7 +6720,67 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
-        filteredBuiltin.length + filtered.length === 0
+        subTab === 'discover' ? h(
+          'div',
+          { className: 'cm-int-section' },
+          h(
+            'div',
+            { className: 'cm-int-section-head' },
+            h('h3', null, '收录的插件（从 GitHub 下载）'),
+            h('span', { className: 'cm-muted' }, '只显示收录清单里的插件；加插件 = 编辑数据根目录的 github-plugins.json'),
+            h(
+              'button',
+              {
+                className: 'cm-btn cm-btn-small',
+                type: 'button',
+                style: { marginLeft: 'auto' },
+                disabled: githubLoading,
+                onClick: loadGithubCatalog,
+              },
+              githubLoading ? '读取中…' : '重新读取',
+            ),
+          ),
+          githubError
+            ? h(
+                'div',
+                { className: 'cm-banner cm-banner-error' },
+                '读取 GitHub 失败：' + githubError + '（下面卡片可能不全，可点右上「重新读取」）',
+              )
+            : null,
+          githubLoading && !githubCatalog
+            ? h('p', { className: 'cm-hint' }, '正在读取 GitHub…（匿名 API 有每小时限额，Host 会缓存 10 分钟；限流时自动改用网页接口）')
+            : null,
+          githubCatalog && filteredGithub.length > 0
+            ? h(
+                'div',
+                { className: 'cm-int-grid' },
+                filteredGithub.map((item) => h(GitHubPluginCard, { key: item.id, item, onOpen: openGithubDetail })),
+              )
+            : (!githubLoading && !githubError
+                ? h('p', { className: 'cm-hint' }, tokens.length > 0 ? 'GitHub 里没有匹配「' + query.trim() + '」的仓库。' : '暂时没有可显示的 GitHub 插件，点右上「重新读取」再试。')
+                : null),
+          githubCatalog && githubCatalog.note ? h('p', { className: 'cm-hint' }, githubCatalog.note) : null,
+        ) : null,
+        subTab === 'discover' && !githubLoading && !githubError && filteredGithub.length === 0
+          ? h(
+              'div',
+              { className: 'cm-empty cm-int-empty' },
+              h(
+                'div',
+                { className: 'cm-int-empty-title' },
+                tokens.length > 0 ? '收录清单里没有匹配「' + query.trim() + '」的插件' : '收录清单是空的',
+              ),
+              h(
+                'p',
+                null,
+                tokens.length > 0
+                  ? '换个关键词试试，或者清空搜索看全部。'
+                  : '编辑数据根目录的 github-plugins.json 添加插件（owner / repo / name / intro 四条），保存后点「刷新」即可。',
+              ),
+              githubCatalog && githubCatalog.manifestFile ? h('code', { className: 'cm-int-path' }, githubCatalog.manifestFile) : null,
+            )
+          : null,
+        subTab === 'installed' && filteredBuiltin.length + filtered.length === 0
           ? h(
               'div',
               { className: 'cm-empty cm-int-empty' },
@@ -5889,7 +6806,7 @@ window.__ModuleLoader__.load({
                 : null,
             )
           : null,
-        h(
+        subTab === 'installed' ? h(
           'section',
           { className: 'cm-int-guide' },
           h(
@@ -5916,7 +6833,7 @@ window.__ModuleLoader__.load({
                 h('pre', { className: 'cm-pre' }, JSON.stringify(SAMPLE_INTEGRATION, null, 2)),
               )
             : null,
-        ),
+        ) : null,
       )
     }
     // ── panel ──────────────────────────────────────────────────────────────
