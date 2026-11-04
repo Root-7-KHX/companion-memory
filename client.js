@@ -3779,6 +3779,7 @@ window.__ModuleLoader__.load({
       const vpInfo = qqStatus && qqStatus.voiceprint
       const proactivePending = proactive && Array.isArray(proactive.pending) ? proactive.pending : []
       const proactiveRecent = proactive && Array.isArray(proactive.recent) ? proactive.recent : []
+      const proactiveMissed = proactive && Array.isArray(proactive.missed) ? proactive.missed : []
       const proactivePeerName = (scope, peerId) => {
         const peerList = Array.isArray(qqPeers) ? qqPeers : []
         const id = String(peerId || '')
@@ -4437,7 +4438,7 @@ window.__ModuleLoader__.load({
               : h(
                   'div',
                   null,
-                  h('p', { className: 'cm-hint' }, 'AI 每轮聊完默认都会约一个时间——几分钟、几小时、几天、几年都行，到点它醒过来现场想说什么；不想说就不发。你一说新话，之前约好的时间就作废，它会按当时的判断重新定。只有你明确说「别打扰 / 别发」，它这一轮才不定。超过 QQ 被动回复窗口（私聊 60 分钟 / 群聊 5 分钟）的到点走主动消息通道，腾讯可能拦，发不出去会在下面写明原因。'),
+                  h('p', { className: 'cm-hint' }, 'AI 每轮聊完都要由它自己定一个时间（系统不会替它补默认间隔）——几分钟、几小时、几天、几年都行，到点它醒过来现场想说什么；不想说就不发。你一说新话，之前约好的时间就作废，它会按当时的判断重新定。只有你明确说「别打扰 / 别发」，它这一轮才不定；漏定了会在下面标出来，下一轮也会提醒它补。超过 QQ 被动回复窗口（私聊 60 分钟 / 群聊 5 分钟）的到点走主动消息通道，腾讯可能拦，发不出去会在下面写明原因。'),
                   h(
                     'div',
                     { className: 'cm-qq-form' },
@@ -4500,6 +4501,9 @@ window.__ModuleLoader__.load({
                     h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: proactiveBusy, onClick: saveProactiveLimits }, '保存'),
                   ),
                   proactiveNotice ? h('p', { className: 'cm-hint' }, proactiveNotice) : null,
+                  proactiveMissed.length > 0
+                    ? h('p', { className: 'cm-hint' }, '⚠️ AI 上一轮说完话没有定下一条主动冒泡（系统不替它补，下一轮会提醒它补上）。')
+                    : null,
                   proactivePending.length === 0
                     ? h('p', { className: 'cm-muted' }, '现在没有挂着的主动冒泡。')
                     : h(
@@ -4551,42 +4555,100 @@ window.__ModuleLoader__.load({
      * 自带的 AI语音 应用（独立插件 ai-voice 提供引擎和接口，界面挂在这里）。
      * 所有数据走 /ai-voice/api；这个应用只在 AI语音 插件装上时才能打开。
      */
+    /**
+     * 2026-11-03 新接入的 6 个输出语音的引擎。
+     * 和后端 ai-voice/lib/config.js 的 EXTRA_ENGINES 一一对应（key 同时是接口路由和 audio/<key> 目录名）。
+     * refText：要填「参考音里说的那句话」；instruct：可选语气/风格指令；speed：要不要语速滑条；voice：预设音色列表。
+     */
+    const AV_EXTRA_ENGINES = [
+      { key: 'spark', title: 'Spark-TTS（克隆）', short: 'Spark-TTS', badge: 'CPU 上短句约 20~50 秒', hint: '零样本克隆：选一个参考音，写要念的内容，用参考音的声音念出来（不用填参考音台词）。', refText: false, instruct: false, speed: false, voice: null },
+      { key: 'cosyvoice', title: 'CosyVoice3（克隆）', short: 'CosyVoice3', badge: 'CPU 上短句约 20~90 秒', hint: '零样本克隆 + 语气指令：选参考音、写要念的内容；参考音台词可选（填了音色更像，留空会自动走跨语种克隆）。', refText: true, refTextRequired: false, refTextHint: '参考音里说的那句话（可选：填了音色更像；留空或跟台词一样会自动走跨语种克隆）', refTextPlaceholder: '填参考音里说的那句话；留空也行', instruct: true, speed: false, voice: null },
+      { key: 'fish', title: 'OpenAudio S1-mini（克隆）', short: 'OpenAudio S1-mini', badge: 'CPU 上短句约 40~90 秒', hint: '零样本克隆；想要笑 / 哭这类情绪，可以填括号标记（(sad)、(angry)、(laughing)、(whispering)），或直接写进台词。', refText: false, instruct: true, speed: false, voice: null, instructPlaceholder: '例：(laughing) / (sad) / (whispering)' },
+      { key: 'gptsovits', title: 'GPT-SoVITS（克隆）', short: 'GPT-SoVITS', badge: 'CPU 上短句约 45~90 秒', hint: '少样本克隆：选参考音 + 填参考音台词（必须和参考音真实内容一致），再写要念的内容。', refText: true, refTextRequired: true, instruct: false, speed: false, voice: null },
+      { key: 'f5', title: 'F5-TTS（克隆）', short: 'F5-TTS', badge: 'CPU 上约 1.5~2.5 分钟（含加载）', hint: '零样本克隆：选参考音 + 填参考音台词（必须和参考音真实内容一致），再写要念的内容。', refText: true, refTextRequired: true, instruct: false, speed: false, voice: null },
+      { key: 'kokoro', title: 'Kokoro（预设音色）', short: 'Kokoro', badge: '轻量 · CPU 上约 3 秒', hint: '不用参考音：选一个自带音色，写要念的内容就行。', refText: false, instruct: false, speed: true, voice: [['zf_xiaobei', '小北（女）'], ['zf_xiaoni', '小妮（女）'], ['zf_xiaoxiao', '小小（女）'], ['zf_xiaoyi', '小艺（女）'], ['zm_yunjian', '云健（男）'], ['zm_yunxi', '云希（男）'], ['zm_yunxia', '云夏（男）'], ['zm_yunyang', '云扬（男）']] },
+    ]
+
     function AiVoiceBuiltinApp(props) {
       const { onBack } = props
       const AV = '/ai-voice/api'
       const [status, setStatus] = useState(null)
-      const [audio, setAudio] = useState([])
+      const [designAudio, setDesignAudio] = useState([])
+      const [speakAudio, setSpeakAudio] = useState([])
+      const [qwenAudio, setQwenAudio] = useState([])
       const [refs, setRefs] = useState([])
       const [notice, setNotice] = useState('')
       const [busyKind, setBusyKind] = useState('')
       const [job, setJob] = useState(null)
       const [lastDone, setLastDone] = useState(null)
       const [desc, setDesc] = useState('温柔软糯的年轻女声，二十多岁，语速偏慢，声音轻一点')
-      const [line, setLine] = useState('你今天怎么这么晚才回来呀，我等了你好久。')
-      const [sayText, setSayText] = useState('你是不是……是不是不要我了。')
+      const [designRef, setDesignRef] = useState('')
+      const [line, setLine] = useState('你好啊！很高兴见到你！')
+      const [sayText, setSayText] = useState('你好啊！很高兴见到你！')
+      const [qwenSpeaker, setQwenSpeaker] = useState('Vivian')
+      const [qwenRef, setQwenRef] = useState('')
+      const [qwenText, setQwenText] = useState('你好啊！很高兴见到你！')
+      const [qwenInstruct, setQwenInstruct] = useState('用非常开心的语气说')
       const [ref, setRef] = useState('')
+      // 六个新引擎各自的输入（text / ref / refText / instruct / voice / speed）与生成结果列表
+      const [extra, setExtra] = useState(() => {
+        const init = {}
+        for (const def of AV_EXTRA_ENGINES) {
+          init[def.key] = { text: '你好啊！很高兴见到你！', ref: '', refText: '', instruct: '', voice: def.voice ? def.voice[0][0] : '', speed: 1, audio: [] }
+        }
+        return init
+      })
       const [emotion, setEmotion] = useState('crying')
       const [alpha, setAlpha] = useState(1)
       const [speed, setSpeed] = useState(1)
       const [cfgDraft, setCfgDraft] = useState(null)
+      const [busyStartedAt, setBusyStartedAt] = useState(0)
+      const [busyElapsed, setBusyElapsed] = useState(0)
+      const pendingEnterRef = useRef(false)
+      const runSpeakRef = useRef(null)
 
-      const avGet = useCallback((path) => fetch(AV + path, { headers: { accept: 'application/json' }, credentials: 'same-origin' }).then(unwrap), [])
-      const avPost = useCallback((path, body) => fetch(AV + path, { method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) }).then(unwrap), [])
+      const avGet = useCallback((path) => fetch(AV + path, { headers: { accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' }).then(unwrap), [])
+      const avPost = useCallback((path, body) => fetch(AV + path, { method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' }, credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(body || {}) }).then(unwrap), [])
 
-      const load = useCallback(async () => {
+      const load = useCallback(async (options = {}) => {
+        const silent = options && options.silent === true
         try {
-          const [st, a, r] = await Promise.all([avGet('/status'), avGet('/files?dir=audio'), avGet('/files?dir=ref')])
+          const extraFetches = AV_EXTRA_ENGINES.map((def) => avGet('/files?dir=' + def.key))
+          const [st, d, s, q, r, ...extraLists] = await Promise.all([avGet('/status'), avGet('/files?dir=design'), avGet('/files?dir=speak'), avGet('/files?dir=qwen'), avGet('/files?dir=ref'), ...extraFetches])
           setStatus(st)
-          setAudio(Array.isArray(a.items) ? a.items : [])
+          setDesignAudio(Array.isArray(d.items) ? d.items : [])
+          setSpeakAudio(Array.isArray(s.items) ? s.items : [])
+          setQwenAudio(Array.isArray(q.items) ? q.items : [])
           setRefs(Array.isArray(r.items) ? r.items : [])
+          setExtra((prev) => {
+            const next = { ...prev }
+            AV_EXTRA_ENGINES.forEach((def, index) => {
+              const list = extraLists[index]
+              next[def.key] = { ...(prev[def.key] || {}), audio: Array.isArray(list && list.items) ? list.items : [] }
+            })
+            return next
+          })
           setCfgDraft((prev) => prev || { ...st.config })
-          setNotice('')
+          if (!silent) setNotice('')
         } catch (error) {
-          setNotice('读取 AI语音 失败：' + error.message)
+          if (!silent) setNotice('读取 AI语音 失败：' + error.message)
         }
       }, [avGet])
 
       useEffect(() => { load() }, [load])
+      // 生成可能来自后台/另一个窗口：列表每隔几秒自己刷新一次（静默，不打断提示）
+      useEffect(() => {
+        const timer = setInterval(() => { load({ silent: true }) }, 5000)
+        return () => clearInterval(timer)
+      }, [load])
+      // 生成中的计时器：面板上直接显示已经跑了多少秒
+      useEffect(() => {
+        if (busyStartedAt === 0) { setBusyElapsed(0); return undefined }
+        const tick = () => setBusyElapsed(Math.max(0, Math.round((Date.now() - busyStartedAt) / 1000)))
+        tick()
+        const timer = setInterval(tick, 1000)
+        return () => clearInterval(timer)
+      }, [busyStartedAt])
       const enabled = !!(status && status.config && status.config.enabled)
       useEffect(() => {
         if (ref === '' && refs.length > 0) {
@@ -4604,7 +4666,9 @@ window.__ModuleLoader__.load({
             setJob(current)
             if (current.status !== 'running') {
               await load()
+              setTimeout(() => { load({ silent: true }) }, 800)
               setBusyKind('')
+              setBusyStartedAt(0)
               if (current.status === 'done') {
                 const match = /generated in ([0-9.]+)s/.exec(current.log || '')
                 const seconds = match ? Math.round(Number(match[1])) : null
@@ -4619,40 +4683,121 @@ window.__ModuleLoader__.load({
 
       const runDesign = useCallback(async () => {
         if (line.trim() === '') { setNotice('先写要念的内容'); return }
+        if (designRef !== '' && !refs.some((item) => item.name === designRef)) { setNotice('选中的参考音已经不在音库里了，重新选一个'); return }
         setBusyKind('design')
+        setBusyStartedAt(Date.now())
         try {
-          const created = await avPost('/design', { desc, text: line })
+          const created = await avPost('/design', { desc, text: line, ref: designRef })
           setJob({ id: created.job, status: 'running', log: '' })
-          setNotice('已开始生成（CPU 上约 20 秒~几分钟）')
+          setNotice('已开始生成（CPU 上短句约 15~30 秒）')
           await load()
           poll(created.job)
-        } catch (error) { setBusyKind(''); setNotice('生成失败：' + error.message) }
-      }, [avPost, desc, line, load, poll])
+        } catch (error) { setBusyKind(''); setBusyStartedAt(0); setNotice('生成失败：' + error.message) }
+      }, [avPost, desc, designRef, line, load, poll, refs])
 
       const runSpeak = useCallback(async () => {
+        if (busyKind !== '') { setNotice('正在生成，等这次完成再发'); return }
+        if (!enabled) { setNotice('AI语音 总开关关着，先打开再合成'); return }
         if (ref === '') { setNotice('先去音库上传或生成一个参考音'); return }
         if (sayText.trim() === '') { setNotice('先写要说的话'); return }
         setBusyKind('speak')
+        setBusyStartedAt(Date.now())
         try {
           const created = await avPost('/speak', { ref, text: sayText, emotion, alpha, speed })
           setJob({ id: created.job, status: 'running', log: '' })
-          setSayText('')
-          setNotice('已开始合成（CPU 上约半分钟~两分钟）')
+          setNotice('已开始合成（CPU 上短句约 25~60 秒，比声音设计慢一点）；台词留在框里，想改可以改完再合一次')
           await load()
           poll(created.job)
-        } catch (error) { setBusyKind(''); setNotice('合成失败：' + error.message) }
-      }, [alpha, avPost, emotion, load, poll, ref, sayText, speed])
+        } catch (error) { setBusyKind(''); setBusyStartedAt(0); setNotice('合成失败：' + error.message) }
+      }, [alpha, avPost, busyKind, emotion, enabled, load, poll, ref, sayText, speed])
 
-      const saveToRef = useCallback(async (name) => {
-        try { await avPost('/copy-to-ref', { name }); setNotice('已存进参考音库'); await load() } catch (error) { setNotice('保存失败：' + error.message) }
+      const runQwen = useCallback(async () => {
+        if (busyKind !== '') { setNotice('正在生成，等这次完成再发'); return }
+        if (!enabled) { setNotice('AI语音 总开关关着，先打开再合成'); return }
+        if (qwenText.trim() === '') { setNotice('先写要说的话'); return }
+        if (qwenRef !== '' && !refs.some((item) => item.name === qwenRef)) { setNotice('选中的参考音已经不在音库里了，重新选一个'); return }
+        const instruct = qwenInstruct.trim() === '' ? '用自然、稍微带点情绪的语气说' : qwenInstruct.trim()
+        setBusyKind('qwen')
+        setBusyStartedAt(Date.now())
+        try {
+          const created = await avPost('/qwen', { text: qwenText, speaker: qwenSpeaker, instruct, ref: qwenRef })
+          setJob({ id: created.job, status: 'running', log: '' })
+          setNotice('已开始合成（Qwen3-TTS，CPU 上短句约 10~20 秒）；台词和指令留在框里，想改可以改完再合一次')
+          await load()
+          poll(created.job)
+        } catch (error) { setBusyKind(''); setBusyStartedAt(0); setNotice('合成失败：' + error.message) }
+      }, [avPost, busyKind, enabled, load, poll, qwenInstruct, qwenRef, qwenSpeaker, qwenText, refs])
+
+      useEffect(() => { runSpeakRef.current = runSpeak }, [runSpeak])
+
+      /** 改某个新引擎的输入（只更新那一个 key）。 */
+      const setExtraItem = useCallback((key, patch) => {
+        setExtra((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }))
+      }, [])
+      /** 新引擎统一合成入口：按 AV_EXTRA_ENGINES 描述提交到各自的接口。 */
+      const runExtra = useCallback(async (def) => {
+        if (busyKind !== '') { setNotice('正在生成，等这次完成再发'); return }
+        if (!enabled) { setNotice('AI语音 总开关关着，先打开再合成'); return }
+        const item = (extra && extra[def.key]) || {}
+        if (String(item.text || '').trim() === '') { setNotice('先写要说的话'); return }
+        if (item.ref !== '' && !refs.some((entry) => entry.name === item.ref)) { setNotice('选中的参考音已经不在音库里了，重新选一个'); return }
+        // 参考音台词：优先用输入框里的；空着时看参考音旁边有没有记过原话（「存为参考音」会带过来）
+        let refText = String(item.refText || '').trim()
+        if (def.refText && refText === '' && item.ref !== '') {
+          const found = refs.find((entry) => entry.name === item.ref)
+          const recorded = found && found.meta && typeof found.meta.text === 'string' ? found.meta.text.trim() : ''
+          if (recorded !== '') {
+            refText = recorded
+            setExtraItem(def.key, { refText: recorded })
+          }
+        }
+        if (def.refTextRequired && refText === '') { setNotice('先填「参考音里说的那句话」——要和参考音真实内容一致'); return }
+        setBusyKind(def.key)
+        setBusyStartedAt(Date.now())
+        try {
+          const created = await avPost('/' + def.key, {
+            text: item.text,
+            ref: item.ref,
+            refText,
+            instruct: item.instruct,
+            voice: item.voice,
+            speed: item.speed,
+          })
+          setJob({ id: created.job, status: 'running', log: '' })
+          setNotice('已开始合成（' + def.title + '）；台词留在框里，想改可以改完再合一次')
+          await load()
+          poll(created.job)
+        } catch (error) { setBusyKind(''); setBusyStartedAt(0); setNotice('合成失败：' + error.message) }
+      }, [avPost, busyKind, enabled, extra, load, poll, refs, setExtraItem])
+
+      const saveToRef = useCallback(async (item) => {
+        try { await avPost('/copy-to-ref', { name: item.name, dir: item.dir }); setNotice('已存进参考音库'); await load() } catch (error) { setNotice('保存失败：' + error.message) }
       }, [avPost, load])
       const removeFile = useCallback(async (dir, name) => {
         try { await avPost('/delete', { dir, name }); setNotice('已删除'); await load() } catch (error) { setNotice('删除失败：' + error.message) }
       }, [avPost, load])
       const openFolder = useCallback(async (dir) => { try { await avPost('/open', { dir }) } catch { /* ignore */ } }, [avPost])
       const toggleEnabled = useCallback(async () => {
-        try { await avPost('/enabled', { enabled: !enabled }); await load() } catch (error) { setNotice('切换失败：' + error.message) }
-      }, [avPost, enabled, load])
+        try {
+          if (enabled) {
+            // 关 = 直接把整个 AI语音 插件卸载：界面先马上退回，不用等宿主加载器
+            setNotice('已关闭 AI语音（插件已卸载，音频和参考音都保留）')
+            if (typeof onBack === 'function') onBack()
+            fetch(API_BASE + '/apps/toggle', {
+              method: 'POST',
+              headers: { accept: 'application/json', 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ id: 'ai-voice', enabled: false }),
+            }).catch(() => { /* 失败也没关系，卡片会按真实状态显示 */ })
+            return
+          }
+          // 插件活着但功能开关关了：直接把功能打开
+          await avPost('/enabled', { enabled: true })
+          await load()
+        } catch (error) {
+          setNotice('切换失败：' + error.message)
+        }
+      }, [avPost, enabled, load, onBack])
       const uploadRef = useCallback(async (event) => {
         const file = event && event.target && event.target.files ? event.target.files[0] : null
         if (!file) return
@@ -4678,15 +4823,61 @@ window.__ModuleLoader__.load({
         h('div', { className: 'cm-app-card-head' }, h('h3', null, title), badge ? h('span', { className: 'cm-muted' }, badge) : null),
         ...children,
       )
+      const clipMeta = (value, max) => {
+        const text = String(value ?? '').trim()
+        return text.length > max ? text.slice(0, max) + '…' : text
+      }
+      /** 生成时留下的提示词 / 台词 / 情绪参数，显示成一行小字。 */
+      const metaLine = (item) => {
+        const meta = item && item.meta
+        if (!meta || typeof meta !== 'object') return ''
+        const text = String(meta.text || '').trim()
+        if (meta.kind === 'design') {
+          const desc = String(meta.desc || '').trim()
+          const parts = []
+          if (meta.ref) parts.push('参考音：' + clipMeta(meta.ref, 28))
+          if (desc !== '') parts.push('音色：' + clipMeta(desc, 60))
+          if (text !== '') parts.push('台词：' + clipMeta(text, 80))
+          return parts.join(' · ')
+        }
+        if (meta.kind === 'speak') {
+          const parts = []
+          if (text !== '') parts.push('台词：' + clipMeta(text, 80))
+          if (meta.emotionLabel) parts.push('情绪：' + meta.emotionLabel)
+          if (meta.alpha !== undefined && meta.alpha !== null && meta.alpha !== '') parts.push('强度 ' + meta.alpha)
+          if (meta.speed !== undefined && meta.speed !== null && meta.speed !== '') parts.push('语速 ' + meta.speed)
+          if (meta.ref) parts.push('参考音：' + clipMeta(meta.ref, 28))
+          return parts.join(' · ')
+        }
+        if (meta.kind === 'qwen') {
+          const parts = []
+          if (text !== '') parts.push('台词：' + clipMeta(text, 80))
+          if (meta.ref) parts.push('参考音：' + clipMeta(meta.ref, 28))
+          if (meta.speaker) parts.push('说话人：' + meta.speaker)
+          if (meta.instruct) parts.push('情绪：' + clipMeta(meta.instruct, 50))
+          return parts.join(' · ')
+        }
+        if (AV_EXTRA_ENGINES.some((def) => def.key === meta.kind)) {
+          const parts = []
+          if (text !== '') parts.push('台词：' + clipMeta(text, 80))
+          if (meta.ref) parts.push('参考音：' + clipMeta(meta.ref, 28))
+          if (meta.voice) parts.push('音色：' + meta.voice)
+          if (meta.instruct) parts.push('指令：' + clipMeta(meta.instruct, 50))
+          if (meta.speed !== undefined && meta.speed !== null && meta.speed !== '' && Number(meta.speed) !== 1) parts.push('语速 ' + meta.speed)
+          return parts.join(' · ')
+        }
+        return ''
+      }
       const audioRow = (item) => h('li', { key: item.dir + ':' + item.name, className: 'cm-qq-member', style: { flexDirection: 'column', alignItems: 'stretch', gap: '4px' } },
         h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-          h('span', { className: 'cm-qq-name' }, item.name),
+          h('span', { className: 'cm-qq-name', title: item.name, style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '46%' } }, item.name),
           h('span', { className: 'cm-muted' }, (item.kb || 0) + ' KB'),
           h('span', { className: 'cm-muted' }, (item.dir === 'ref' ? '上传时间 ' : '生成时间 ') + formatStamp(item.at)),
           h('a', { className: 'cm-btn cm-btn-small', href: AV + '/file?dir=' + (item.dir || 'audio') + '&name=' + encodeURIComponent(item.name) }, '下载'),
-          item.dir === 'audio' ? h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => saveToRef(item.name) }, '存为参考音') : null,
+          item.dir !== 'ref' ? h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => saveToRef(item) }, '存为参考音') : null,
           h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', onClick: () => removeFile(item.dir || 'audio', item.name) }, '删除'),
         ),
+        metaLine(item) === '' ? null : h('p', { className: 'cm-hint', style: { margin: '0', fontSize: '11.5px', lineHeight: '1.5', opacity: 0.9 }, title: metaLine(item) }, metaLine(item)),
         h('audio', {
           controls: true,
           preload: 'none',
@@ -4705,7 +4896,109 @@ window.__ModuleLoader__.load({
       )
 
       const engines = status && status.engines ? status.engines : null
-      const jobLine = job && job.status === 'running' ? '（' + (busyKind === 'design' ? '声音设计' : '合成') + '中…）' : ''
+      const extraBusyDef = AV_EXTRA_ENGINES.find((def) => def.key === busyKind)
+      const busyLabel = busyKind === 'design' ? '声音设计' : busyKind === 'qwen' ? '情感指令' : (extraBusyDef ? extraBusyDef.title : '合成')
+      const jobLine = job && job.status === 'running' ? '（' + busyLabel + '中… 已用 ' + busyElapsed + ' 秒）' : ''
+
+      /** 新引擎的统一卡片：按 AV_EXTRA_ENGINES 描述决定要显示哪些输入框。 */
+      const extraCard = (def) => {
+        const item = (extra && extra[def.key]) || {}
+        const eng = engines && engines[def.key]
+        const isBusy = busyKind === def.key
+        const refSelect = def.ref !== 'none'
+          ? [
+              h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '参考音（选一个，用它的声音念）'),
+              h('div', { className: 'cm-qq-form' },
+                h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: item.ref || '', onChange: (event) => setExtraItem(def.key, { ref: event.target.value }) },
+                  h('option', { value: '' }, refs.length === 0 ? '（还没有参考音）' : '选一个参考音…'),
+                  refs.map((entry) => h('option', { key: entry.name, value: entry.name }, entry.name)),
+                ),
+              ),
+              refs.length === 0 ? h('p', { className: 'cm-hint' }, '参考音库是空的：先去下面「参考音库」上传一段 wav，或把生成好的声音「存为参考音」。') : null,
+            ]
+          : null
+        const refTextBox = def.refText
+          ? [
+              h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, def.refTextHint || '参考音里说的那句话（必须和参考音真实内容一致；从「存为参考音」来的会自动带出）'),
+              h('input', {
+                type: 'text',
+                className: 'cm-input',
+                style: { width: '100%', boxSizing: 'border-box' },
+                value: item.refText || '',
+                onChange: (event) => setExtraItem(def.key, { refText: event.target.value }),
+                placeholder: def.refTextPlaceholder || '例：你好啊！很高兴见到你！',
+              }),
+            ]
+          : null
+        const instructBox = def.instruct
+          ? [
+              h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '语气 / 风格（可选）'),
+              h('input', {
+                type: 'text',
+                className: 'cm-input',
+                style: { width: '100%', boxSizing: 'border-box' },
+                value: item.instruct || '',
+                onChange: (event) => setExtraItem(def.key, { instruct: event.target.value }),
+                placeholder: def.instructPlaceholder || '例：用开心一点的语气说 / 温柔一点，慢一点',
+              }),
+            ]
+          : null
+        const voiceBox = def.voice
+          ? [
+              h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '音色'),
+              h('div', { className: 'cm-qq-form' },
+                h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: item.voice || '', onChange: (event) => setExtraItem(def.key, { voice: event.target.value }) },
+                  def.voice.map(([value, label]) => h('option', { key: value, value }, value + ' · ' + label)),
+                ),
+              ),
+            ]
+          : null
+        const speedBox = def.speed
+          ? [
+              h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
+                h('span', { className: 'cm-hint' }, '语速'),
+                h('input', { type: 'range', min: '0.5', max: '2', step: '0.05', value: item.speed || 1, onChange: (event) => setExtraItem(def.key, { speed: Number(event.target.value) }) }),
+                h('span', { className: 'cm-hint' }, String(item.speed || 1)),
+              ),
+            ]
+          : null
+        return card(def.title, def.badge,
+          h('p', { className: 'cm-hint' }, def.hint),
+          eng && eng.ready === false
+            ? h('p', { className: 'cm-hint' }, '引擎未就绪：去最下面「设置」里填这个引擎的 Python 路径 / 模型目录（当前 ' + (eng.python ? 'Python 已找到' : 'Python 没找到') + ' · ' + (eng.model ? '模型已找到' : '模型没找到') + '）。')
+            : null,
+          refSelect,
+          refTextBox,
+          h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '要念的内容（示例：你好啊！很高兴见到你！）'),
+          h('div', { className: 'cm-qq-form' },
+            h('input', {
+              type: 'text',
+              className: 'cm-input',
+              style: { flex: '1 1 220px', minWidth: '160px' },
+              value: item.text || '',
+              onChange: (event) => setExtraItem(def.key, { text: event.target.value }),
+              onKeyDown: (event) => {
+                if (event.key !== 'Enter' || event.shiftKey) return
+                if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return
+                event.preventDefault()
+                runExtra(def)
+              },
+              placeholder: '要说的话，回车直接合成（Enter）',
+            }),
+            h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: () => runExtra(def) }, isBusy ? '合成中…' : '合成语音'),
+          ),
+          instructBox,
+          voiceBox,
+          speedBox,
+          h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '回车或点「合成语音」都行；正在生成时按钮会灰掉。'),
+          busyKind !== '' ? h('p', { className: 'cm-hint' }, busyLabel + '还在生成（已用 ' + busyElapsed + ' 秒），等这次完成再发。') : null,
+          lastDone && lastDone.kind === def.key ? h('p', { className: 'cm-hint' }, '上次合成时间：' + formatStamp(lastDone.at) + (lastDone.seconds !== null ? '，用时 ' + lastDone.seconds + ' 秒' : '')) : null,
+          h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, (def.short || def.title) + ' 生成的语音在下面：'),
+          (item.audio || []).length === 0
+            ? h('p', { className: 'cm-muted' }, '还没有合成过。')
+            : h('ul', { className: 'cm-qq-members' }, (item.audio || []).slice(0, 10).map(audioRow)),
+        )
+      }
 
       return h('div', { className: 'cm-app' },
         h('div', { className: 'cm-app-head' },
@@ -4721,38 +5014,64 @@ window.__ModuleLoader__.load({
         ),
         h('div', { className: 'cm-app-body' },
           notice ? h('p', { className: 'cm-hint' }, notice) : null,
-          card('声音设计（VoxCPM2）', 'CPU 上约 20 秒~几分钟',
-            h('p', { className: 'cm-hint' }, '用文字描述造一个声音；生成后可以试听、下载，或点「存为参考音」给下面的情绪合成用。'),
+          card('声音设计（VoxCPM2）', 'CPU 上短句约 15~30 秒',
+            h('p', { className: 'cm-hint' }, '用文字描述造一个新声音，或者选一个参考音、用它的声音继续说；生成后可以试听、下载，或点「存为参考音」。'),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '参考音（可选：选一个就用它的声音，音色描述会被忽略）'),
+            h('div', { className: 'cm-qq-form' },
+              h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: designRef, onChange: (event) => setDesignRef(event.target.value) },
+                h('option', { value: '' }, '不用参考音（按音色描述造新声音）'),
+                refs.map((item) => h('option', { key: item.name, value: item.name }, item.name)),
+              ),
+            ),
+            refs.length === 0 ? h('p', { className: 'cm-hint' }, '参考音库还是空的：去下面「参考音库」上传一段 wav，或把生成好的声音「存为参考音」。') : null,
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '音色描述（示例：温柔软糯的年轻女声，二十多岁，语速偏慢）'),
             h('textarea', { className: 'cm-input', rows: 2, style: { width: '100%', boxSizing: 'border-box' }, value: desc, onChange: (event) => setDesc(event.target.value), placeholder: '音色描述，例如：温柔软糯的年轻女声，二十多岁，语速偏慢' }),
-            h('textarea', { className: 'cm-input', rows: 2, style: { width: '100%', boxSizing: 'border-box', marginTop: '6px' }, value: line, onChange: (event) => setLine(event.target.value), placeholder: '要念的内容（1~2 句）' }),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '要念的内容（示例：你好啊！很高兴见到你！）'),
+            h('textarea', { className: 'cm-input', rows: 2, style: { width: '100%', boxSizing: 'border-box' }, value: line, onChange: (event) => setLine(event.target.value), placeholder: '要念的内容（1~2 句）' }),
             h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
               h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runDesign }, busyKind === 'design' ? '生成中…' : '生成音频'),
               h('span', { className: 'cm-hint' }, jobLine),
             ),
             lastDone && lastDone.kind === 'design' ? h('p', { className: 'cm-hint' }, '上次生成时间：' + formatStamp(lastDone.at) + (lastDone.seconds !== null ? '，用时 ' + lastDone.seconds + ' 秒' : '')) : null,
+            h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, '声音设计生成的语音在下面：'),
+            designAudio.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有生成过。')
+              : h('ul', { className: 'cm-qq-members' }, designAudio.slice(0, 10).map(audioRow)),
           ),
-          card('带情绪说话（IndexTTS-2.5）', '哭腔 / 笑 / 生气…',
+          card('带情绪说话（IndexTTS-2.5）', '哭腔 / 笑 / 生气… · CPU 上短句约 25~60 秒',
+            h('p', { className: 'cm-hint' }, '参考音（先选一个声音样本）'),
             h('div', { className: 'cm-qq-form' },
               h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: ref, onChange: (event) => setRef(event.target.value) },
                 refs.length === 0 ? h('option', { value: '' }, '（还没有参考音）') : null,
                 refs.map((item) => h('option', { key: item.name, value: item.name }, item.name)),
               ),
             ),
-            h('input', {
-              type: 'text',
-              className: 'cm-input',
-              style: { width: '100%', boxSizing: 'border-box', marginTop: '6px' },
-              value: sayText,
-              onChange: (event) => setSayText(event.target.value),
-              onKeyDown: (event) => {
-                if (event.key !== 'Enter' || event.shiftKey) return
-                if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return
-                event.preventDefault()
-                if (busyKind !== '' || !enabled) return
-                runSpeak()
-              },
-              placeholder: '要说的话，回车直接合成（Enter）',
-            }),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '要说的话（示例：你好啊！很高兴见到你！）'),
+            h('div', { className: 'cm-qq-form', style: { marginTop: '6px' } },
+              h('input', {
+                type: 'text',
+                className: 'cm-input',
+                style: { flex: '1 1 220px', minWidth: '160px' },
+                value: sayText,
+                onChange: (event) => setSayText(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key !== 'Enter' || event.shiftKey) return
+                  if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) { pendingEnterRef.current = true; return }
+                  event.preventDefault()
+                  runSpeak()
+                },
+                onCompositionEnd: () => {
+                  if (!pendingEnterRef.current) return
+                  pendingEnterRef.current = false
+                  setTimeout(() => { if (runSpeakRef.current) runSpeakRef.current() }, 0)
+                },
+                placeholder: '要说的话，回车直接合成（Enter）',
+              }),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runSpeak }, busyKind === 'speak' ? '合成中…' : '合成语音'),
+            ),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '回车或点「合成语音」都行；正在生成时按钮会灰掉。'),
+            busyKind !== '' ? h('p', { className: 'cm-hint' }, busyLabel + '还在生成（已用 ' + busyElapsed + ' 秒），等这次完成再发。') : null,
+            notice ? h('p', { className: 'cm-hint' }, notice) : null,
             h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } },
               [['neutral', '平静'], ['happy', '开心'], ['laugh', '大笑'], ['sad', '悲伤'], ['crying', '哭腔'], ['angry', '生气'], ['afraid', '害怕'], ['surprised', '惊讶'], ['spoiled', '撒娇'], ['tired', '疲惫']].map(([key, label]) =>
                 h('button', { key, type: 'button', className: 'cm-btn cm-btn-small' + (emotion === key ? ' cm-btn-primary' : ''), onClick: () => setEmotion(key) }, label),
@@ -4766,15 +5085,80 @@ window.__ModuleLoader__.load({
               h('input', { type: 'range', min: '0.5', max: '2', step: '0.05', value: speed, onChange: (event) => setSpeed(Number(event.target.value)) }),
               h('span', { className: 'cm-hint' }, String(speed)),
             ),
-            h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
-              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runSpeak }, busyKind === 'speak' ? '合成中…' : '合成语音'),
-              h('span', { className: 'cm-hint' }, job && job.status === 'running' && busyKind === 'speak' ? '合成中…' : ''),
-            ),
-            h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, '生成的语音在下面：'),
-            audio.length === 0
-              ? h('p', { className: 'cm-muted' }, '还没有生成过音频。')
-              : h('ul', { className: 'cm-qq-members' }, audio.slice(0, 10).map(audioRow)),
+            lastDone && lastDone.kind === 'speak' ? h('p', { className: 'cm-hint' }, '上次合成时间：' + formatStamp(lastDone.at) + (lastDone.seconds !== null ? '，用时 ' + lastDone.seconds + ' 秒' : '')) : null,
+            h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, '带情绪说话生成的语音在下面：'),
+            speakAudio.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有合成过。')
+              : h('ul', { className: 'cm-qq-members' }, speakAudio.slice(0, 10).map(audioRow)),
           ),
+          card('情感指令（Qwen3-TTS 0.6B）', 'CPU 上短句约 10~20 秒',
+            h('p', { className: 'cm-hint' }, '自带 9 个说话人 + 情绪指令；也可以选一个参考音、用它的声音说话。'),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '参考音（可选：选一个就用它的声音，说话人 / 情绪指令不生效）'),
+            h('div', { className: 'cm-qq-form' },
+              h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: qwenRef, onChange: (event) => setQwenRef(event.target.value) },
+                h('option', { value: '' }, '不用参考音（用下面选的说话人）'),
+                refs.map((item) => h('option', { key: item.name, value: item.name }, item.name)),
+              ),
+            ),
+            refs.length === 0 ? h('p', { className: 'cm-hint' }, '参考音库还是空的：先去下面「参考音库」上传一段 wav。') : null,
+            engines && engines.qwen3tts && engines.qwen3tts.cloneReady === false ? h('p', { className: 'cm-hint' }, 'Base 模型还没就绪：去「设置」里填 Qwen3-TTS Base 模型目录，才能用参考音克隆。') : null,
+            qwenRef !== '' ? h('p', { className: 'cm-hint' }, '已选参考音：这次按参考音的音色念（说话人 / 情绪指令不生效）。') : null,
+            h('p', { className: 'cm-hint' }, '说话人'),
+            h('div', { className: 'cm-qq-form' },
+              h('select', { className: 'cm-input', style: { flex: '1 1 220px' }, value: qwenSpeaker, onChange: (event) => setQwenSpeaker(event.target.value) },
+                [['Vivian', '明亮年轻女声'], ['Serena', '温柔年轻女声'], ['Uncle_Fu', '成熟男声'], ['Dylan', '京腔小伙'], ['Eric', '成都话'], ['Ryan', '英文男声'], ['Aiden', '英文男声'], ['Ono_Anna', '日文女声'], ['Sohee', '韩文女声']].map(([key, label]) =>
+                  h('option', { key, value: key }, key + ' · ' + label),
+                ),
+              ),
+            ),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '要说的话（示例：你好啊！很高兴见到你！）'),
+            h('div', { className: 'cm-qq-form' },
+              h('input', {
+                type: 'text',
+                className: 'cm-input',
+                style: { flex: '1 1 220px', minWidth: '160px' },
+                value: qwenText,
+                onChange: (event) => setQwenText(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key !== 'Enter' || event.shiftKey) return
+                  if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return
+                  event.preventDefault()
+                  runQwen()
+                },
+                placeholder: '要说的话，回车直接合成（Enter）',
+              }),
+              h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busyKind !== '' || !enabled, onClick: runQwen }, busyKind === 'qwen' ? '合成中…' : '合成语音'),
+            ),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '情绪 / 语气指令（示例：用开心的语气说）'),
+            h('input', {
+              type: 'text',
+              className: 'cm-input',
+              style: { width: '100%', boxSizing: 'border-box' },
+              value: qwenInstruct,
+              onChange: (event) => setQwenInstruct(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key !== 'Enter' || event.shiftKey) return
+                if (event.isComposing || (event.nativeEvent && event.nativeEvent.isComposing)) return
+                event.preventDefault()
+                runQwen()
+              },
+              placeholder: '例：用开心的语气说 / 用撒娇、黏人的语气说',
+            }),
+            h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } },
+              [['开心', '用非常开心的语气说'], ['悲伤', '用悲伤、有点哽咽的语气说'], ['撒娇', '用撒娇、黏人的语气说'], ['生气', '用有点生气、压着火的语气说'], ['温柔', '用平静温柔的语气说，慢一点'], ['平静', '用平静自然的语气说']].map(([label, instruct]) =>
+                h('button', { key: label, type: 'button', className: 'cm-btn cm-btn-small' + (qwenInstruct === instruct ? ' cm-btn-primary' : ''), onClick: () => setQwenInstruct(instruct) }, label),
+              ),
+            ),
+            h('p', { className: 'cm-hint', style: { marginTop: '6px' } }, '回车或点「合成语音」都行；正在生成时按钮会灰掉。'),
+            busyKind !== '' ? h('p', { className: 'cm-hint' }, busyLabel + '还在生成（已用 ' + busyElapsed + ' 秒），等这次完成再发。') : null,
+            notice ? h('p', { className: 'cm-hint' }, notice) : null,
+            lastDone && lastDone.kind === 'qwen' ? h('p', { className: 'cm-hint' }, '上次合成时间：' + formatStamp(lastDone.at) + (lastDone.seconds !== null ? '，用时 ' + lastDone.seconds + ' 秒' : '')) : null,
+            h('p', { className: 'cm-hint', style: { marginTop: '10px' } }, 'Qwen3-TTS 生成的语音在下面：'),
+            qwenAudio.length === 0
+              ? h('p', { className: 'cm-muted' }, '还没有合成过。')
+              : h('ul', { className: 'cm-qq-members' }, qwenAudio.slice(0, 10).map(audioRow)),
+          ),
+          ...AV_EXTRA_ENGINES.map((def) => extraCard(def)),
           card('参考音库', refs.length + ' 个',
             h('div', { className: 'cm-qq-form' },
               h('label', { className: 'cm-btn cm-btn-small', style: { cursor: 'pointer' } }, '上传录音（wav）',
@@ -4793,11 +5177,28 @@ window.__ModuleLoader__.load({
             h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.indexttsPython : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), indexttsPython: event.target.value }) }),
             h('label', { className: 'cm-hint' }, 'IndexTTS-2.5 模型目录'),
             h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.indexttsModel : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), indexttsModel: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'Qwen3-TTS Python 路径'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.qwen3ttsPython : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), qwen3ttsPython: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'Qwen3-TTS 模型目录（CustomVoice：9 个说话人）'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.qwen3ttsModel : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), qwen3ttsModel: event.target.value }) }),
+            h('label', { className: 'cm-hint' }, 'Qwen3-TTS Base 模型目录（参考音克隆用）'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? cfgDraft.qwen3ttsBaseModel : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), qwen3ttsBaseModel: event.target.value }) }),
+            ...AV_EXTRA_ENGINES.flatMap((def) => [
+              h('label', { key: def.key + '-py-label', className: 'cm-hint' }, def.title + ' Python 路径'),
+              h('input', { key: def.key + '-py', className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? (cfgDraft[def.key + 'Python'] || '') : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), [def.key + 'Python']: event.target.value }) }),
+              h('label', { key: def.key + '-model-label', className: 'cm-hint' }, def.title + ' 模型目录'),
+              h('input', { key: def.key + '-model', className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, value: cfgDraft ? (cfgDraft[def.key + 'Model'] || '') : '', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), [def.key + 'Model']: event.target.value }) }),
+            ]),
+            h('label', { className: 'cm-hint' }, '本地推理占用线程数（0 = 自动，一半核心；生成时电脑卡就调小）'),
+            h('input', { className: 'cm-input', style: { width: '100%', boxSizing: 'border-box' }, type: 'number', min: '0', value: cfgDraft ? String(cfgDraft.inferenceThreads ?? 0) : '0', onChange: (event) => setCfgDraft({ ...(cfgDraft || {}), inferenceThreads: Number(event.target.value) }) }),
             h('div', { className: 'cm-qq-form', style: { marginTop: '8px' } },
               h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: saveCfg }, '保存设置'),
               h('span', { className: 'cm-hint' }, status && status.config ? '数据目录：' + status.config.dataDir : ''),
             ),
-            h('p', { className: 'cm-hint' }, '引擎：VoxCPM2 ' + (engines && engines.voxcpm && engines.voxcpm.ready ? '就绪' : '未就绪') + ' · IndexTTS-2.5 ' + (engines && engines.indextts && engines.indextts.ready ? '就绪' : '未就绪')),
+            h('p', { className: 'cm-hint' }, '引擎：' + [['VoxCPM2', 'voxcpm'], ['IndexTTS-2.5', 'indextts'], ['Qwen3-TTS', 'qwen3tts']]
+              .concat(AV_EXTRA_ENGINES.map((def) => [def.title.replace(/（.*$/, ''), def.key]))
+              .map(([label, key]) => label + ' ' + (engines && engines[key] && engines[key].ready ? '就绪' : '未就绪'))
+              .join(' · ')),
             h('div', { className: 'cm-qq-form' },
               h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('audio') }, '打开输出文件夹'),
               h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: () => openFolder('data') }, '打开数据文件夹'),
@@ -4807,8 +5208,18 @@ window.__ModuleLoader__.load({
             'section',
             { className: 'cm-app-card cm-app-credits' },
             h('h3', null, '来源 / 声明'),
-            h('p', { className: 'cm-hint' }, '来源：本地安装的 AI语音 插件（ai-voice，作者 Root-7-KHX）提供引擎与接口，界面挂在 AI记忆 面板里；两个语音引擎分别来自开源项目 VoxCPM2（OpenBMB，Apache-2.0 许可）· https://github.com/OpenBMB/VoxCPM 与 IndexTTS-2.5（bilibili IndexTeam，模型使用许可）· https://github.com/index-tts/index-tts。'),
-            h('p', { className: 'cm-hint' }, '声明：所有语音都在本机生成、只存在本机，不会上传网络；模型与权重版权归原作者，按各自许可使用；克隆或使用他人声音须事先取得本人同意，禁止冒充、诈骗等违法用途，由此产生的后果由使用者自己承担。'),
+            h('p', { className: 'cm-hint' }, '来源：本地安装的 AI语音 插件（ai-voice，作者 Root-7-KHX）提供引擎与接口，界面挂在 AI记忆 面板里。'),
+            h('p', { className: 'cm-hint' }, '引擎来源：'),
+            h('p', { className: 'cm-hint' }, '· VoxCPM2（OpenBMB，Apache-2.0 许可）— github.com/OpenBMB/VoxCPM'),
+            h('p', { className: 'cm-hint' }, '· IndexTTS-2.5（bilibili IndexTeam，模型使用许可）— github.com/index-tts/index-tts'),
+            h('p', { className: 'cm-hint' }, '· Qwen3-TTS 0.6B（阿里通义千问，Apache-2.0 许可）— github.com/QwenLM/Qwen3-TTS'),
+            h('p', { className: 'cm-hint' }, '· Spark-TTS（SparkAudio，Apache-2.0 许可）— github.com/SparkAudio/Spark-TTS'),
+            h('p', { className: 'cm-hint' }, '· CosyVoice3（FunAudioLLM / 阿里通义，Apache-2.0 许可）— github.com/FunAudioLLM/CosyVoice'),
+            h('p', { className: 'cm-hint' }, '· OpenAudio S1-mini（FishAudio / fish-speech）— github.com/fishaudio/fish-speech'),
+            h('p', { className: 'cm-hint' }, '· GPT-SoVITS（RVC-Boss 社区项目）— github.com/RVC-Boss/GPT-SoVITS'),
+            h('p', { className: 'cm-hint' }, '· F5-TTS（SWivid 等，MIT 代码许可）— github.com/SWivid/F5-TTS'),
+            h('p', { className: 'cm-hint' }, '· Kokoro-82M（hexgrad，Apache-2.0 许可）— huggingface.co/hexgrad/Kokoro-82M'),
+            h('p', { className: 'cm-hint' }, '声明：所有语音都在本机生成、只存本机，不会上传网络；模型与权重版权归原作者，按各自许可使用；克隆 / 使用他人声音须先取得本人同意，禁止冒充、诈骗等违法用途，后果由使用者自己承担。'),
           ),
         ),
       )
@@ -4900,9 +5311,20 @@ window.__ModuleLoader__.load({
           { className: 'cm-int-card-head' },
           h('h3', { className: 'cm-int-card-name' }, item.name),
           h(
-            'span',
-            { className: 'cm-int-card-ver' },
-            (item.builtin ? '自带 · ' : '') + (item.version ? 'v' + item.version : ''),
+            'div',
+            { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexShrink: 0 } },
+            h(
+              'span',
+              { className: 'cm-int-card-ver' },
+              (item.builtin ? '自带 · ' : '') + (item.version ? 'v' + item.version : ''),
+            ),
+            homepage
+              ? h(
+                  'a',
+                  { className: 'cm-int-link', style: { marginLeft: '0' }, href: homepage, target: '_blank', rel: 'noreferrer noopener' },
+                  '主页 ↗',
+                )
+              : null,
           ),
         ),
         h(
@@ -4918,7 +5340,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'cm-int-card-foot' },
-          h('span', { className: 'cm-muted' }, item.author ? '作者 ' + item.author : ''),
+          h('span', { className: 'cm-muted', style: { whiteSpace: 'nowrap' } }, item.author ? '作者 ' + item.author : ''),
           typeof props.onToggleApp === 'function'
             ? h(
                 'label',
@@ -4933,18 +5355,23 @@ window.__ModuleLoader__.load({
               )
             : null,
           item.openable !== false
-            ? h(
-                'button',
-                { className: 'cm-btn cm-btn-small cm-btn-primary cm-int-open', type: 'button', onClick: () => props.onOpen && props.onOpen(item.app || item.id) },
-                '打开',
-              )
-            : null,
-          homepage
-            ? h(
-                'a',
-                { className: 'cm-int-link', href: homepage, target: '_blank', rel: 'noreferrer noopener' },
-                '主页 ↗',
-              )
+            ? (() => {
+                const blocked = props.pluginBacked && props.appEnabled !== true
+                return h(
+                  'button',
+                  {
+                    className: 'cm-btn cm-btn-small cm-btn-primary cm-int-open',
+                    type: 'button',
+                    disabled: blocked,
+                    title: blocked ? '插件没开，先打开左边的开关' : '',
+                    onClick: () => {
+                      if (blocked) return
+                      if (props.onOpen) props.onOpen(item.app || item.id)
+                    },
+                  },
+                  '打开',
+                )
+              })()
             : null,
         ),
       )
@@ -4976,8 +5403,12 @@ window.__ModuleLoader__.load({
       })
       // 自带 QQ 应用的总开关：卡片上直接显示开/关
       const [qq, setQq] = useState(null)
-      // 独立插件「AI语音」的总开关：接入软件卡片上直接显示开/关
+      // AI语音 插件本身是否加载（保留旧状态给页面内的功能开关用）
       const [avVoice, setAvVoice] = useState(null)
+      // 插件型应用的加载状态：{ [appId]: { enabled } }（卡片开关直接控制插件加载/卸载）
+      const [appPlugins, setAppPlugins] = useState({})
+      // 刚点过的开关：宿主热加载需要一两秒，期间别让 5 秒轮询把界面闪回旧状态
+      const pendingAppToggles = useRef({})
       // 通用应用开关状态：清单里带 statusUrl 的应用自动读取（以后新应用也走这里）
       const [appStates, setAppStates] = useState({})
 
@@ -5033,15 +5464,40 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [loadAvVoice])
 
+      /** 读插件型应用的加载状态（来自宿主 pluginManager，不是插件内部功能开关）。 */
+      const loadAppPlugins = useCallback(async () => {
+        try {
+          const res = await fetch(API_BASE + '/apps/state', { headers: { accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' })
+          const payload = res.ok ? await unwrap(res) : null
+          const apps = payload && payload.apps && typeof payload.apps === 'object' ? payload.apps : {}
+          // 刚点过的开关先按目标状态显示，等宿主真实状态跟上（最多 8 秒）
+          const pending = pendingAppToggles.current || {}
+          const now = Date.now()
+          for (const appId of Object.keys(apps)) {
+            const item = pending[appId]
+            if (item && now < item.until) apps[appId] = { enabled: item.enabled }
+          }
+          setAppPlugins(apps)
+        } catch {
+          setAppPlugins({})
+        }
+      }, [])
+
+      useEffect(() => {
+        loadAppPlugins()
+        const timer = setInterval(loadAppPlugins, 5000)
+        return () => clearInterval(timer)
+      }, [loadAppPlugins])
+
       /** 每张卡片的开关状态：QQ / AI语音 走各自接口，其它应用读插件自己记住的状态。 */
       const appEnabledFor = useCallback((item) => {
         if (!item) return true
         if (item.id === 'qqbot-app') return !!(qq && qq.enabled)
-        if (item.app === 'ai-voice') return !!(avVoice && avVoice.config && avVoice.config.enabled)
+        if (item.id && appPlugins[item.id] && typeof appPlugins[item.id].enabled === 'boolean') return appPlugins[item.id].enabled
         if (item.id in appStates) return !!appStates[item.id]
         if (typeof item.enabled === 'boolean') return item.enabled
         return true
-      }, [qq, avVoice, appStates])
+      }, [qq, appPlugins, appStates])
 
       const loadGenericApps = useCallback(async (items) => {
         const next = {}
@@ -5089,6 +5545,25 @@ window.__ModuleLoader__.load({
             notify(enabled ? '已开启 QQ 机器人' : '已关闭 QQ 机器人（已断开）')
             return
           }
+          if (item && item.id && appPlugins[item.id]) {
+            // 插件型应用：开关 = 官方插件页那个开关（直接加载/卸载整个插件）
+            // 先乐观更新，按钮立刻响应；宿主那边加载/卸载是后台完成的。
+            const previous = appPlugins[item.id].enabled
+            pendingAppToggles.current[item.id] = { enabled, until: Date.now() + 8000 }
+            setAppPlugins((prev) => ({ ...prev, [item.id]: { enabled } }))
+            try {
+              const next = await apiPost('/apps/toggle', { id: item.id, enabled })
+              const confirmed = next && next.enabled === true
+              pendingAppToggles.current[item.id] = { enabled: confirmed, until: Date.now() + 8000 }
+              setAppPlugins((prev) => ({ ...prev, [item.id]: { enabled: confirmed } }))
+            } catch (caught) {
+              delete pendingAppToggles.current[item.id]
+              setAppPlugins((prev) => ({ ...prev, [item.id]: { enabled: previous } }))
+              throw caught
+            }
+            notify(enabled ? '已开启 ' + (item.name || item.id) + '（插件后台加载中）' : '已关闭 ' + (item.name || item.id) + '（插件后台卸载中，数据都保留）')
+            return
+          }
           if (item && typeof item.enabledUrl === 'string' && item.enabledUrl !== '') {
             const next = await fetch(item.enabledUrl, {
               method: 'POST',
@@ -5122,7 +5597,7 @@ window.__ModuleLoader__.load({
         } catch (caught) {
           notify('切换失败：' + caught.message, true)
         }
-      }, [notify])
+      }, [notify, appPlugins, loadAppPlugins])
 
       const toggleQq = useCallback(async (enabled) => {
         try {
@@ -5356,6 +5831,7 @@ window.__ModuleLoader__.load({
                     onOpen: setOpenApp,
                     appEnabled: appEnabledFor(item),
                     onToggleApp: toggleApp,
+                    pluginBacked: !!(item.id && appPlugins[item.id]),
                   }),
                 ),
               ),
@@ -5381,6 +5857,7 @@ window.__ModuleLoader__.load({
                     onOpen: setOpenApp,
                     appEnabled: appEnabledFor(item),
                     onToggleApp: toggleApp,
+                    pluginBacked: !!(item.id && appPlugins[item.id]),
                   }),
                 ),
               ),
