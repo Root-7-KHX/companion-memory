@@ -1,5 +1,42 @@
 # 更新记录
 
+## 1.3.0 — 2026-11-08
+
+### 新增：习惯提示小模型 → 对话人习惯 的接入桥
+
+- 新增 `lib/habit-hint-bridge.js`：只读 `@local/habit-hint` 公开的 `GET /habit-hint/api/status`，把它最近一次生成的「习惯」写进对应对话的「对话人习惯」；标签 `["习惯","小模型"]`，复用强度机制（新建 50 / 重复 +10 / 按天衰减）。
+- 不修改 habit-hint 的注入行为；QQ 只是消息通道——QQ 路由会话照常生成习惯并写入该会话（`generateInQQSessions` 只放开生成，`injectInQQSessions` 仍为 false，不往 QQ 会话注入提示、避免重复回复）。
+- 认 habit-hint 的 `lastHints.session` 字段（兼容旧的 `sessionId`）。
+- 每 30 秒自动同步一次（有新批次才写，同一批不重复）；`<数据根>/habit-hint-sync.json` 记录接入进度与最近一次结果。
+- 新接口：`GET /companion/api/habit-hint/state`、`POST /companion/api/habit-hint/sync`（`{force:true}` 立即同步）、`POST /companion/api/habit-hint/enabled`。
+- 自检：桥的过滤 / 去重 / 加强 / QQ 会话跳过 / 插件关闭 / 接入关闭 / 状态落盘 9 项冒烟测试全过。
+
+### 修复：QQ 消息列表与人名单没按通道区分
+
+- `/qq/messages`、`/qq/peers` 支持 `channel=official|onebot`；面板「QQ 机器人」和「个人号接入」两个入口现在各显示各的通道，不再把官方消息显示在个人号页（不传 channel 仍保持旧的全局行为）。
+- 出站消息透传 `channel`：`lib/qq.js`、`lib/qq-bridge.js`、`lib/api.js` 发消息 / 回写路由时带上通道，同一个会话在两条通道之间不会串消息。
+- 新增 `lib/onebot.js`（OneBot v11 正向 WebSocket 传输层）与 `lib/onebot-setup.js`（NapCat 自动下载 / 配置 / 拉起）：个人号也能接入，群聊默认只处理 @ 消息，语音 / 卡片 / 按钮等官方面向能力在个人号模式下降级为文本或条数。
+
+### 新增：睡眠期预计算（空闲会话后台预判下一轮）
+
+- 新增 `lib/sleep-compute.js`：空闲会话（默认 25 分钟没有新消息、近 3 天活跃过）在后台拉起本机 `python D:\AI\习惯模型\scripts\sleep_compute.py`，预判「接下来可能聊什么、该怎么接」，结果写到 `D:\AI\习惯模型\data\sleep\<sessionId>.json`；结果带 12 小时过期时间，过期的不会被注入。
+- `lib/prompt.js` 读取该文件并注入动态上下文「🧠 睡眠期预判」（只提醒可能的话题与语气，明确标注仅供参考、别当事实、别主动复述）。
+- 默认 5 分钟 tick 一次、启动后首次等 90 秒；同一 tick 最多同时跑 2 个、同一会话 45 分钟内最多一次；python 或脚本不存在、启动失败、结果文件损坏都静默跳过，不影响聊天。
+- 新接口：`GET /companion/api/sleep-compute`（只读状态：上次 tick、已拉起 / 跳过次数、最近一次错误）。
+- 全部在本机跑，不联网、不改记忆、不代替主模型回答。
+
+### 新增：对话语气卡（按对话注入语气习惯与反复说过的短句）
+
+- `lib/prompt.js` 新增语气卡注入：按会话读取 `D:\AI\习惯模型\data\style\<sessionId>.json`，读不到就回退 `_default.json`；把 `tone_notes`（语气习惯）和 `habit_sentences`（反复说过的短句）注入动态上下文「🗣️ 本对话的语气习惯」，并单独列出一行「你反复说过的短句」。
+- 只加在动态上下文，不改静态系统提示词（不会越聊越大）；按文件 mtime 缓存，文件不存在 / 内容不合法都静默跳过；没有语气卡数据时提示词与以前完全一样。
+- 数据目录可用 `styleCardDir` 配置覆盖，默认 `D:\AI\习惯模型\data\style`。
+
+### 调整：习惯桥改成 30 秒同步，并加重复加强冷却 30 分钟
+
+- `lib/habit-hint-bridge.js` 同步间隔由 90 秒改为 30 秒（有新批次才写）；首次同步在插件启动 20 秒后。
+- 同一句话（同一会话 + 同一习惯文本）30 分钟内不重复加强，避免小模型每轮都抽到同一批习惯、把强度一路刷到 100。
+- 修复 `lastHints` 会话字段：优先读 `session`，兼容旧版 `sessionId`。
+
 ## 1.2.2 — 2026-11-04
 
 ### 新增：接入软件拆成「发现 / 已安装」两页 + 从 GitHub 下载收录插件

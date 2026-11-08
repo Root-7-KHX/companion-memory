@@ -147,8 +147,8 @@ window.__ModuleLoader__.load({
 .cm-int-section { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
 .cm-int-section-head { display: flex; align-items: baseline; gap: 8px; }
 .cm-int-section-head h3 { margin: 0; font-size: 13px; font-weight: 650; }
-.cm-int-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
-.cm-int-card { display: flex; flex-direction: column; gap: 7px; padding: 12px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 10px; background: var(--cm-bg, #ffffff); }
+.cm-int-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-items: stretch; }
+.cm-int-card { display: flex; flex-direction: column; gap: 7px; padding: 12px; border: 1px solid var(--cm-border, rgba(15, 23, 42, 0.1)); border-radius: 10px; background: var(--cm-bg, #ffffff); min-width: 0; }
 .cm-int-card:hover { border-color: var(--cm-border-strong, rgba(15, 23, 42, 0.24)); }
 .cm-int-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cm-int-card-name { margin: 0; font-size: 13.5px; font-weight: 650; }
@@ -157,7 +157,14 @@ window.__ModuleLoader__.load({
 .cm-int-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--cm-surface-2, rgba(15, 23, 42, 0.06)); color: var(--cm-text-2, #475569); }
 .cm-int-tag-strong { color: var(--cm-brand, #2f5bea); background: rgba(47, 91, 234, 0.1); }
 .cm-int-card-desc { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--cm-text-2, #475569); }
-.cm-int-card-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 2px; }
+/* 卡片底部固定三列：作者 | 开关（真正居中、宽度固定） | 打开（右对齐）。
+   开关整块宽度固定（滑块 40 + 间隔 8 + 文字 96），所以每张卡片滑块的位置完全一样。 */
+.cm-int-card-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; margin-top: auto; padding-top: 2px; }
+.cm-int-foot-author { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-int-card-foot .cm-switch { justify-self: center; flex: 0 0 auto; }
+.cm-int-card-foot .cm-switch-text { display: inline-block; min-width: 96px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-int-card-foot .cm-btn { flex: 0 0 auto; white-space: nowrap; margin-left: 0; min-width: 56px; justify-content: center; justify-self: end; }
+.cm-int-open { margin-left: 0; }
 .cm-int-link { margin-left: auto; font-size: 12px; color: var(--cm-brand, #2f5bea); text-decoration: none; }
 .cm-int-link:hover { text-decoration: underline; }
 .cm-int-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 34px 8px; }
@@ -3166,7 +3173,8 @@ window.__ModuleLoader__.load({
 
     /** 自带的 QQ 机器人应用（点开就能用，不依赖 dsh-qqbot）。 */
     function QqbotBuiltinApp(props) {
-      const { onBack } = props
+      const { onBack, channel = 'official' } = props
+      const isOneBot = channel === 'onebot'
       const [people, setPeople] = useState(null)
       const [error, setError] = useState('')
       const [busy, setBusy] = useState(false)
@@ -3188,6 +3196,7 @@ window.__ModuleLoader__.load({
       const [appIdDraft, setAppIdDraft] = useState('')
       const [secretDraft, setSecretDraft] = useState('')
       const [qqNotice, setQqNotice] = useState('')
+      const [qr, setQr] = useState('')
       const [qqBusy, setQqBusy] = useState('')
       const [qqMessages, setQqMessages] = useState([])
       const [stickers, setStickers] = useState([])
@@ -3249,13 +3258,13 @@ window.__ModuleLoader__.load({
           const [status, config, messages, stickerList, stickerDirInfo, scheduleList, bridgeInfo, sessionList, peerInfo, proactiveInfo] = await Promise.all([
             get('/qq/status'),
             get('/qq/config'),
-            get('/qq/messages?limit=10'),
+            get('/qq/messages?limit=10&channel=' + (isOneBot ? 'onebot' : 'official')),
             get('/qq/stickers?limit=60'),
             get('/qq/stickers/dir'),
             get('/qq/schedule'),
-            get('/qq/bridge'),
+            get('/qq/bridge?channel=' + (isOneBot ? 'onebot' : 'official')),
             get('/qq/bridge/sessions'),
-            get('/qq/peers'),
+            get('/qq/peers?channel=' + (isOneBot ? 'onebot' : 'official')),
             get('/qq/proactive'),
           ])
           setBridge(bridgeInfo)
@@ -3341,9 +3350,14 @@ window.__ModuleLoader__.load({
         setQqBusy('save')
         try {
           const appId = appIdDraft !== '' ? appIdDraft : (qqConfig && qqConfig.appId) || ''
-          await apiPost('/qq/config', { appId, appSecret: secretDraft, enabled: true })
-          setSecretDraft('')
-          const started = await apiPost('/qq/start', {})
+          let started
+          if (isOneBot) {
+            started = await apiPost('/qq/channel', { channel: 'onebot', enabled: true })
+          } else {
+            await apiPost('/qq/config', { appId, appSecret: secretDraft, enabled: true })
+            setSecretDraft('')
+            started = await apiPost('/qq/start', {})
+          }
           setQqStatus(started)
           setQqNotice(started && started.connected ? '已连接 QQ' : '配置已保存，正在连接…（同一个机器人只能有一条网关连接）')
           await loadQq()
@@ -3357,7 +3371,8 @@ window.__ModuleLoader__.load({
       const disconnectQq = useCallback(async () => {
         setQqBusy('stop')
         try {
-          setQqStatus(await apiPost('/qq/stop', {}))
+          if (isOneBot) setQqStatus(await apiPost('/qq/channel', { channel: 'onebot', enabled: false }))
+          else setQqStatus(await apiPost('/qq/stop', {}))
           setQqNotice('已断开 QQ')
         } catch (error) {
           setQqNotice('断开失败：' + error.message)
@@ -3365,6 +3380,21 @@ window.__ModuleLoader__.load({
           setQqBusy('')
         }
       }, [])
+
+      const autoConfigure = useCallback(async () => {
+        setQqBusy('auto')
+        setQqNotice('')
+        try {
+          const result = await apiPost('/qq/onebot/auto', {})
+          if (result && result.qr) setQr(result.qr)
+          setQqNotice(result && result.ok ? '已自动配置并连接：' + (result.wsUrl || '') : ((result && result.error) || '配置中…'))
+          await loadQq()
+        } catch (error) {
+          setQqNotice('自动配置失败：' + error.message)
+        } finally {
+          setQqBusy('')
+        }
+      }, [loadQq])
 
       const toggleQq = useCallback(async (enabled) => {
         setQqBusy('toggle')
@@ -3548,7 +3578,7 @@ window.__ModuleLoader__.load({
 
       const saveBridge = useCallback(async (patch) => {
         try {
-          const next = await apiPost('/qq/bridge', { sessionId: bridgeDraft !== '' ? bridgeDraft : (bridge && bridge.sessionId) || '', ...patch })
+          const next = await apiPost('/qq/bridge', { channel: isOneBot ? 'onebot' : 'official', sessionId: bridgeDraft !== '' ? bridgeDraft : (bridge && bridge.sessionId) || '', ...patch })
           setBridge(next)
           setBridgeNotice('已保存')
           await loadQq()
@@ -3560,7 +3590,7 @@ window.__ModuleLoader__.load({
       const saveOwner = useCallback(async (openId) => {
         setOwnerSaving(true)
         try {
-          const next = await apiPost('/qq/bridge/owner', { openId })
+          const next = await apiPost('/qq/bridge/owner', { openId, channel: isOneBot ? 'onebot' : 'official' })
           setBridge(next)
           setOwnerNotice(openId === '' ? '已取消绑定：所有 QQ 人都按「用户」处理' : '已绑定：这个账号算「用户」，其他人各自单独一个说话人')
           await loadQq()
@@ -3685,7 +3715,7 @@ window.__ModuleLoader__.load({
       const saveAutoRoute = useCallback(async (patch) => {
         if (!bridge) return
         try {
-          await apiPost('/qq/bridge', {
+          await apiPost('/qq/bridge', { channel: isOneBot ? 'onebot' : 'official',
             enabled: bridge.enabled === true,
             sessionId: bridge.sessionId || '',
             approvalEnabled: bridge.approvalEnabled === true,
@@ -3817,7 +3847,7 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-app-head' },
           h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
-          h('div', { className: 'cm-app-title' }, h('h2', null, 'QQ 机器人'), h('p', { className: 'cm-app-sub' }, '自带应用 · 不用安装 dsh-qqbot')),
+          h('div', { className: 'cm-app-title' }, h('h2', null, isOneBot ? '个人号接入' : 'QQ 机器人'), h('p', { className: 'cm-app-sub' }, isOneBot ? '自带应用 · OneBot v11 / NapCat' : '自带应用 · 不用安装 dsh-qqbot')),
           h(
             'label',
             { className: 'cm-switch', style: { marginLeft: 'auto', color: '#fff' }, title: 'QQ 接入总开关' },
@@ -4088,10 +4118,19 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'cm-app-card-head' },
               h('h3', null, '连接 QQ'),
-              h('span', { className: 'cm-badge' }, qqStatus ? (qqStatus.connected ? '已连接' : qqStatus.status || '未连接') : '读取中…'),
+              h('span', { className: 'cm-badge' }, qqStatus ? ((isOneBot ? qqStatus.onebotConnected : qqStatus.officialConnected) ? '已连接' : (isOneBot ? '未连接' : qqStatus.status || '未连接')) : '读取中…'),
             ),
             h('p', { className: 'cm-hint' }, '原生连接：AI记忆 自己连 QQ 官方网关（不经过 dsh-qqbot）。同一个机器人只能有一条网关连接，连之前先把 dsh-qqbot 那边的 QQ 停掉，不然会互相顶掉。'),
-            h(
+            isOneBot
+              ? h('div', null,
+                  h('div', { className: 'cm-qq-form' },
+                    h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: qqBusy !== '', onClick: autoConfigure }, qqBusy === 'auto' ? '正在配置…' : '自动配置并连接'),
+                    h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: qqBusy !== '', onClick: disconnectQq }, qqBusy === 'stop' ? '断开中…' : '断开'),
+                  ),
+                  h('p', { className: 'cm-hint' }, '自动：检查/下载 NapCat → 拉起 → 出二维码 → 登录后自动补配置并连接。'),
+                  qr ? h('img', { src: qr, alt: 'NapCat 登录二维码', style: { width: 200, height: 200, display: 'block', margin: '8px auto', borderRadius: 8, background: '#fff' } }) : null,
+                )
+              : h(
               'div',
               { className: 'cm-qq-form' },
               h('input', {
@@ -5908,11 +5947,237 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 「个人号接入（OneBot）」外置插件的设置页。
+     * 插件包（@local/onebot-panel）只在 integrations 里写一份清单并复用本插件的接口；
+     * 真正点「打开」看到的这一页由 AI记忆 承载，和 habit-hint 的统一窗口一个思路。
+     */
+    function OneBotPanelApp(props) {
+      const { onBack } = props
+      const [status, setStatus] = useState(null)
+      const [config, setConfig] = useState(null)
+      const [error, setError] = useState('')
+      const [notice, setNotice] = useState('')
+      const [busy, setBusy] = useState('')
+      const [inited, setInited] = useState(false)
+      const [officialOn, setOfficialOn] = useState(true)
+      const [onebotOn, setOnebotOn] = useState(false)
+      const [url, setUrl] = useState('ws://127.0.0.1:6198')
+      const [token, setToken] = useState('')
+      const [requireMention, setRequireMention] = useState(true)
+      const [setup, setSetup] = useState(null)
+      const [qr, setQr] = useState('')
+
+      const load = useCallback(async () => {
+        try {
+          const [snapshot, cfg] = await Promise.all([apiGet('/qq/status'), apiGet('/qq/config')])
+          setStatus(snapshot)
+          setConfig(cfg)
+          setError('')
+          apiGet('/qq/onebot/state').then(setSetup).catch(() => {})
+          if (!inited) {
+            const ch = (cfg && cfg.channels) || { official: true, onebot: false }
+            setOfficialOn(ch.official !== false)
+            setOnebotOn(ch.onebot === true)
+            setUrl((cfg && cfg.onebot && cfg.onebot.url) || 'ws://127.0.0.1:6198')
+            setRequireMention(!(cfg && cfg.onebot && cfg.onebot.requireMention === false))
+            setInited(true)
+          }
+        } catch (caught) {
+          setError(String(caught && caught.message ? caught.message : caught))
+        }
+      }, [inited])
+
+      useEffect(() => {
+        load()
+        const timer = setInterval(load, 5000)
+        return () => clearInterval(timer)
+      }, [load])
+
+      const save = useCallback(async () => {
+        setBusy('save')
+        setNotice('')
+        try {
+          await apiPost('/qq/config', { channels: { official: officialOn, onebot: onebotOn }, onebot: { url: url.trim(), token, requireMention: requireMention === true }, enabled: true })
+          const started = await apiPost('/qq/enabled', { enabled: true })
+          setToken('')
+          setNotice(started && started.connected ? '已连接' : '已保存，正在连接…')
+          await load()
+        } catch (caught) {
+          setNotice('保存失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setBusy('')
+        }
+      }, [officialOn, onebotOn, url, token, requireMention, load])
+
+      const autoConfig = useCallback(async () => {
+        setBusy('auto')
+        setNotice('')
+        try {
+          const result = await apiPost('/qq/onebot/auto', {})
+          if (!result || result.ok !== true) {
+            setNotice('自动配置失败：' + ((result && result.error) || '未知错误'))
+            return
+          }
+          if (result.needLogin === true) {
+            setQr(result.qr || '')
+            setNotice(result.error ? '需要登录：' + result.error : '请用手机 QQ（小号）扫码登录 NapCat，登录后会自动继续')
+            return
+          }
+          setNotice('已自动配置：' + result.wsUrl + '（QQ ' + result.uin + '）')
+          await load()
+        } catch (caught) {
+          setNotice('自动配置失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setBusy('')
+        }
+      }, [load])
+
+      // 还没登录时：每 3 秒看一眼：二维码变了就刷新，登录成功后自动继续配置
+      useEffect(() => {
+        if (!setup || setup.loggedIn) return undefined
+        const timer = setInterval(async () => {
+          try {
+            const next = await apiGet('/qq/onebot/state')
+            setSetup(next)
+            if (next && next.loggedIn) {
+              setQr('')
+              const result = await apiPost('/qq/onebot/auto', {})
+              if (result && result.ok) setNotice('已自动配置：' + result.wsUrl)
+              await load()
+              return
+            }
+            const image = await apiGet('/qq/onebot/qr')
+            setQr(image && image.qr ? image.qr : '')
+          } catch {
+            // 轮询失败不打扰
+          }
+        }, 3000)
+        return () => clearInterval(timer)
+      }, [setup, load])
+      const disconnect = useCallback(async () => {
+        setBusy('stop')
+        setNotice('')
+        try {
+          await apiPost('/qq/stop', {})
+          setNotice('已断开 QQ 接入')
+          await load()
+        } catch (caught) {
+          setNotice('断开失败：' + String(caught && caught.message ? caught.message : caught))
+        } finally {
+          setBusy('')
+        }
+      }, [load])
+
+      const connected = Boolean(status && status.connected)
+      const statusText = !status ? '读取中…' : connected ? '已连接' : status.status || '未连接'
+
+      return h(
+        'div',
+        null,
+        h('div', { className: 'cm-app-card-head', style: { marginBottom: 10 } },
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: onBack }, '← 返回'),
+          h('h3', { style: { marginLeft: 8 } }, '个人号接入（OneBot）'),
+          h('span', { className: 'cm-badge', style: { marginLeft: 'auto' } }, statusText),
+        ),
+        error ? h('p', { className: 'cm-hint cm-banner-error' }, '读取状态失败：' + error) : null,
+        h('section', { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' },
+            h('h3', null, '状态'),
+            h('span', { className: 'cm-badge' }, status && status.officialConnected && status.onebotConnected ? '双通道' : (status && status.onebotConnected ? '个人号' : '官方机器人')),
+          ),
+          h('dl', { className: 'cm-kv' },
+            h('div', { className: 'cm-kv-row' }, h('dt', null, '连接'), h('dd', null, statusText)),
+            h('div', { className: 'cm-kv-row' }, h('dt', null, '机器人'), h('dd', null, (status && status.botName) || '—')),
+            h('div', { className: 'cm-kv-row' }, h('dt', null, '协议端地址'), h('dd', null, (status && status.onebotUrl) || '—')),
+            h('div', { className: 'cm-kv-row' }, h('dt', null, '最近消息数'), h('dd', null, String((status && status.recentCount) || 0))),
+          ),
+          status && status.lastError ? h('p', { className: 'cm-hint' }, '最近错误：' + status.lastError) : null,
+          notice ? h('p', { className: 'cm-hint' }, notice) : null,
+        ),
+        h('section', { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '接入方式')),
+          h('div', { className: 'cm-qq-form' },
+            h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busy !== '', onClick: autoConfig }, busy === 'auto' ? '正在配置…' : '自动配置并连接（推荐）'),
+            h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '', onClick: async () => {
+              setBusy('switch')
+              setNotice('')
+              try {
+                const result = await apiPost('/qq/onebot/switch', {})
+                if (result && result.qr) setQr(result.qr)
+                setNotice(result && result.needLogin ? '已重启 NapCat，请用新的 QQ 号扫码登录' : (result && result.error) || '已切换')
+                await load()
+              } catch (caught) {
+                setNotice('切换失败：' + String(caught && caught.message ? caught.message : caught))
+              } finally {
+                setBusy('')
+              }
+            } }, busy === 'switch' ? '切换中…' : '更换 QQ 号'),
+            setup ? h('span', { className: 'cm-hint' }, 'NapCat：' + (setup.running ? '运行中' : '未运行') + (setup.uin ? ' · QQ ' + setup.uin : '') + (setup.port ? ' · 端口 ' + setup.port : '')) : null,
+          ),
+          qr
+            ? h('div', null,
+                h('p', { className: 'cm-hint' }, '用手机 QQ（小号）扫码登录 NapCat：'),
+                h('img', { src: qr, alt: 'NapCat 登录二维码', style: { width: 220, height: 220, display: 'block', margin: '8px auto', borderRadius: 8, background: '#fff' } }),
+                h('p', { className: 'cm-hint' }, '扫码确认后会自动继续（补 WS 配置 → 等端口 → 连接），不用再点按钮。'),
+              )
+            : null,
+          h('p', { className: 'cm-hint' }, '自动配置会：检查 NapCat 的 WebSocket 配置 → 没在跑就拉起来 → 等端口就绪 → 自动填地址并连接，你不用记 ws:// 地址。'),
+          h('p', { className: 'cm-hint' }, '官方机器人：QQ 开放平台的 appId / appSecret（功能受限）。个人号：NapCat / LLOneBot 协议端 + QQ 小号（能私聊、能进群，有封号风险）。'),
+          h('div', { className: 'cm-qq-form' },
+            h('label', { className: 'cm-hint', style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              h('input', { type: 'checkbox', checked: officialOn, onChange: (event) => setOfficialOn(event.target.checked) }),
+              '官方机器人',
+            ),
+            h('label', { className: 'cm-hint', style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              h('input', { type: 'checkbox', checked: onebotOn, onChange: (event) => setOnebotOn(event.target.checked) }),
+              '个人号（OneBot v11）',
+            ),
+          ),
+          onebotOn
+            ? h('div', null,
+                h('div', { className: 'cm-qq-form' },
+                  h('input', {
+                    className: 'cm-input',
+                    type: 'text',
+                    placeholder: 'ws://127.0.0.1:6198（NapCat 的 WebSocket 服务端）',
+                    value: url,
+                    onChange: (event) => setUrl(event.target.value),
+                  }),
+                  h('input', {
+                    className: 'cm-input',
+                    type: 'password',
+                    placeholder: config && config.onebot && config.onebot.hasToken ? 'token 已保存（留空不改）' : 'token（可选）',
+                    value: token,
+                    onChange: (event) => setToken(event.target.value),
+                  }),
+                ),
+                h('label', { className: 'cm-hint', style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+                  h('input', { type: 'checkbox', checked: requireMention, onChange: (event) => setRequireMention(event.target.checked) }),
+                  '群里只有 @ 我才回',
+                ),
+              )
+            : h('p', { className: 'cm-hint' }, '官方机器人的 appId / appSecret 在「QQ 机器人」页里填，这里只切换通道。'),
+          h('div', { className: 'cm-qq-form' },
+            h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busy !== '', onClick: save }, busy === 'save' ? '保存中…' : '保存并连接'),
+            h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '', onClick: disconnect }, busy === 'stop' ? '断开中…' : '断开'),
+            h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '', onClick: () => void load() }, '刷新状态'),
+          ),
+        ),
+        h('section', { className: 'cm-app-card' },
+          h('div', { className: 'cm-app-card-head' }, h('h3', null, '说明')),
+          h('p', { className: 'cm-hint' }, '这一页由 AI记忆 承载；外置插件包 @local/onebot-panel 只负责往接入清单里登记这条软件，连接和消息路由都在 AI记忆 自己这儿。'),
+          h('p', { className: 'cm-hint' }, '链路：QQ ↔ NapCat（小号）↔ OneBot v11 ↔ AI记忆（人格 / 记忆 / 好感度 / 表情包 / 主动冒泡）。'),
+        ),
+      )
+    }
+
     function BuiltinAppView(props) {
       const { appId, item, onBack } = props
       if (appId === 'qqbot') return h(QqbotBuiltinApp, { onBack })
       if (appId === 'ai-voice') return h(AiVoiceBuiltinApp, { onBack })
       if (appId === 'habit-hint') return h(HabitHintBuiltinApp, { item, onBack })
+      if (appId === 'onebot-panel') return h(QqbotBuiltinApp, { onBack, channel: 'onebot' })
       // 其它插件：清单里带 statusUrl 的都走统一窗口（说明/能力/状态/开关）
       if (item && typeof item.statusUrl === 'string' && item.statusUrl !== '') return h(PluginAppPage, { appId, item, onBack })
       // 连状态接口都没写的：插件自带统一页面（说明 + 能力 + 开关），以后装进来也长这样
@@ -6108,11 +6373,11 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'cm-int-card-foot' },
-          h('span', { className: 'cm-muted', style: { whiteSpace: 'nowrap' } }, item.author ? '作者 ' + item.author : ''),
+          h('span', { className: 'cm-muted cm-int-foot-author' }, item.author ? '作者 ' + item.author : ''),
           typeof props.onToggleApp === 'function'
             ? h(
                 'label',
-                { className: 'cm-switch', style: { marginLeft: 'auto' }, title: (item.name || '应用') + ' 总开关' },
+                { className: 'cm-switch', title: (item.name || '应用') + ' 总开关' },
                 h('input', {
                   type: 'checkbox',
                   checked: !!props.appEnabled,
@@ -6451,7 +6716,7 @@ window.__ModuleLoader__.load({
 
       const items = payload && Array.isArray(payload.items) ? payload.items : []
       // 本应用自带的接入（内置清单，不需要 integrations 目录）
-      const builtinItems = payload && Array.isArray(payload.builtin) ? payload.builtin : []
+      const builtinItems = (payload && Array.isArray(payload.builtin) ? payload.builtin : []).filter(Boolean)
       const dir = payload && typeof payload.dir === 'string' ? payload.dir : ''
       const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
       const match = (item) => {
@@ -7445,3 +7710,7 @@ window.__ModuleLoader__.load({
     }
   },
 })
+
+
+
+

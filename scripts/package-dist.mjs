@@ -36,7 +36,19 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const DEFAULT_OUT_DIR = path.resolve(REPO_ROOT, '..', 'dist');
 
-const SKIP_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini', '.git', 'node_modules', '.svn']);
+const SKIP_NAMES = new Set([
+  '.DS_Store',
+  'Thumbs.db',
+  'desktop.ini',
+  '.git',
+  'node_modules',
+  '.svn',
+  '__pycache__',
+  'tmp-stt-test',
+  'logs',
+  'package-dist.mjs',
+]);
+const SKIP_SUFFIXES = ['.pyc', '.pyo', '.log', '.onnx'];
 
 function parseArgs(argv) {
   const opts = { outDir: DEFAULT_OUT_DIR, list: false, help: false };
@@ -131,6 +143,7 @@ function walkFiles(absDir, relPrefix, out) {
   }
   for (const dirent of dirents) {
     if (SKIP_NAMES.has(dirent.name)) continue;
+    if (dirent.isFile() && SKIP_SUFFIXES.some((suffix) => dirent.name.toLowerCase().endsWith(suffix))) continue;
     const rel = relPrefix ? `${relPrefix}/${dirent.name}` : dirent.name;
     const abs = path.join(absDir, dirent.name);
     if (dirent.isDirectory()) {
@@ -182,7 +195,7 @@ function collectFiles(manifest) {
   }
 
   // Mandatory release files.
-  for (const required of ['README.md', 'LICENSE', 'package.json']) {
+  for (const required of ['README.md', 'LICENSE', 'package.json', 'CHANGELOG.md']) {
     const abs = path.join(REPO_ROOT, required);
     if (existsSync(abs) && statSync(abs).isFile()) {
       collected.add(required);

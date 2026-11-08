@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Host half of the companion-memory bundle.
  *
  * One plugin instance serves every conversation, but each conversation keeps a
@@ -15,6 +15,7 @@
  * The Client module (`client.js`) owns all rendering.
  */
 import { createManager } from './lib/manager.js'
+import { createOneBotSetup } from './lib/onebot-setup.js'
 import { installAgentPrompt } from './lib/prompt.js'
 import { registerTool } from './lib/tool.js'
 import { registerTracking } from './lib/tracking.js'
@@ -48,7 +49,11 @@ export function apply(ctx, config) {
       try {
         const qq = manager.qq()
         const cfg = qq.publicConfig()
-        if (cfg.enabled === true && cfg.appId !== '' && cfg.hasSecret) qq.start().catch(() => {})
+        // 官方机器人看 appId+secret；个人号（OneBot）只看协议端地址
+        const channels = cfg.channels || { official: true, onebot: false }
+        const officialReady = channels.official !== false && cfg.appId !== '' && cfg.hasSecret
+        const onebotReady = channels.onebot === true && cfg.onebot && cfg.onebot.url
+        if (cfg.enabled === true && (officialReady || onebotReady)) qq.start().catch(() => {})
       } catch {
         // 自动连失败不影响插件其它部分
       }
@@ -62,6 +67,39 @@ export function apply(ctx, config) {
     return () => bridge.stop()
   }, 'companion-memory: qq bridge')
 
+  // 插件加载后：没装 NapCat 就预下载；开了个人号通道且 6198 没开，就自动拉起并连上（重启 DSH 后不用手点）
+  ctx.effect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const setup = createOneBotSetup(manager.root || '')
+        const installed = await setup.ensureInstalled()
+        if (!installed || installed.ok !== true) return
+        const qq = manager.qq()
+        const cfg = qq.publicConfig()
+        const channels = cfg.channels || {}
+        if (channels.onebot !== true) return
+        const result = await setup.autoConfigure()
+        if (result && result.ok === true && cfg.enabled === true) {
+          qq.start().catch(() => {})
+        }
+      } catch { /* ignore */ }
+    }, 4000)
+    // 看门狗：NapCat 意外退出（崩溃/被关）时，每 60 秒检查一次并自动拉起，保持个人号通道在线
+    const keepAlive = setInterval(async () => {
+      try {
+        const setup = createOneBotSetup(manager.root || '')
+        const state = await setup.getState()
+        if (state.installed !== true) return
+        const qq = manager.qq()
+        const cfg = qq.publicConfig()
+        if ((cfg.channels || {}).onebot !== true || state.running === true) return
+        const result = await setup.autoConfigure()
+        if (result && result.ok === true && cfg.enabled === true) qq.start().catch(() => {})
+      } catch { /* ignore */ }
+    }, 60000)
+    return () => { clearTimeout(timer); clearInterval(keepAlive) }
+  }, 'companion-memory: napcat autostart')
+
   return () => {
     for (const sessionId of manager.enabledSessions()) {
       try {
@@ -73,3 +111,4 @@ export function apply(ctx, config) {
     }
   }
 }
+
