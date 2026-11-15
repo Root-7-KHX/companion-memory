@@ -163,7 +163,7 @@ window.__ModuleLoader__.load({
 .cm-int-foot-author { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-int-card-foot .cm-switch { justify-self: center; flex: 0 0 auto; }
 .cm-int-card-foot .cm-switch-text { display: inline-block; min-width: 96px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cm-int-card-foot .cm-btn { flex: 0 0 auto; white-space: nowrap; margin-left: 0; min-width: 56px; justify-content: center; justify-self: end; }
+.cm-int-card-foot .cm-btn { flex: 0 0 auto; box-sizing: border-box; white-space: nowrap; margin-left: 0; min-width: 56px; justify-content: center; justify-self: end; }
 .cm-int-open { margin-left: 0; }
 .cm-int-link { margin-left: auto; font-size: 12px; color: var(--cm-brand, #2f5bea); text-decoration: none; }
 .cm-int-link:hover { text-decoration: underline; }
@@ -2520,63 +2520,6 @@ window.__ModuleLoader__.load({
         h(
           'section',
           { className: 'cm-card' },
-          h(
-            'div',
-            { className: 'cm-card-head' },
-            h('h3', null, '自动打包'),
-            h(
-              'span',
-              { className: 'cm-muted' },
-              [autoPack.every > 0 ? `每 ${autoPack.every} 轮` : '', autoPack.everyTokens > 0 ? `每约 ${autoPack.everyTokens} tokens` : ''].filter(Boolean).join(' 或 ') || '已关闭',
-            ),
-          ),
-          h(
-            'p',
-            { className: 'cm-hint' },
-            '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮）或每累计约 N tokens（按你俩消息估算），系统自动把这段时间的重点原文、次要摘要、48 小时（聊天时间）归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。tokens 默认跟随「上下文压缩」的触发阈值；填具体数字 = 自定义，填 0 = 关闭 tokens 触发。',
-          ),
-          h(
-            'div',
-            { className: 'cm-actions' },
-            h('input', {
-              ref: packInput,
-              className: 'cm-input cm-input-narrow',
-              type: 'number',
-              min: 0,
-              max: 200,
-              step: 1,
-              defaultValue: String(autoPack.every),
-              'aria-label': '每多少轮对话自动打包一次',
-            }),
-            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: saveAutoPack }, '保存轮数'),
-            h('span', { className: 'cm-muted' }, autoPack.every > 0 ? `当前区间 ${autoPack.turnsSince}/${autoPack.every} 轮，已打包 ${autoPack.count} 次${autoPack.lastPackAt ? `；上次 ${formatStamp(autoPack.lastPackAt)}` : ''}` : `已累计 ${autoPack.totalTurns} 轮对话`),
-          ),
-          h(
-            'div',
-            { className: 'cm-actions' },
-            h('input', {
-              ref: tokenPackInput,
-              className: 'cm-input cm-input-narrow',
-              type: 'number',
-              min: 0,
-              max: 10000000,
-              step: 1000,
-              defaultValue: String(autoPack.everyTokens || 0),
-              'aria-label': '每多少 tokens 自动打包一次',
-            }),
-            h('button', { className: 'cm-btn', type: 'button', onClick: saveAutoPackTokens }, '保存 tokens'),
-            h('button', { className: 'cm-btn', type: 'button', onClick: followAutoPackTokens }, '跟随压缩阈值'),
-            h(
-              'span',
-              { className: 'cm-muted' },
-              (autoPack.everyTokensCustom === false ? '（跟随上下文压缩阈值）' : '') +
-                (autoPack.everyTokens > 0 ? `当前区间约 ${autoPack.tokensSince}/${autoPack.everyTokens} tokens` : `token 触发已关闭，当前区间约 ${autoPack.tokensSince} tokens`),
-            ),
-          ),
-        ),
-        h(
-          'section',
-          { className: 'cm-card' },
           h('div', { className: 'cm-card-head' }, h('h3', null, '层级记忆（多级压缩）'), h('span', { className: 'cm-muted' }, hierarchy ? `已关闭 ${hierarchy.closedYears} 个年度` : '—')),
           h(
             'p',
@@ -2987,7 +2930,7 @@ window.__ModuleLoader__.load({
         ['活跃记忆', `${snapshot.memories.activeCount} 条（上限 ${snapshot.memories.limit} 个交互日自动归档）`],
         ['已归档记忆', `${snapshot.memories.archivedCount} 条`],
         ['知识库归档', `${snapshot.knowledge.archive.length} 天记录 · ${snapshot.knowledge.monthly.length} 份月度包 · ${(snapshot.knowledge.packs || []).length} 份打包/压缩文档`],
-        ['自动打包', snapshot.autoPack && (snapshot.autoPack.every > 0 || snapshot.autoPack.everyTokens > 0) ? `${[snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮` : '', snapshot.autoPack.everyTokens > 0 ? (snapshot.autoPack.everyTokensCustom === false ? `每约 ${snapshot.autoPack.everyTokens} tokens（跟随压缩阈值）` : `每约 ${snapshot.autoPack.everyTokens} tokens`) : ''].filter(Boolean).join(' 或 ')}（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince} 轮 / 约 ${snapshot.autoPack.tokensSince} tokens，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在知识库页设置）'],
+        ['自动打包', snapshot.autoPack && (snapshot.autoPack.every > 0 || snapshot.autoPack.everyTokens > 0) ? `${[snapshot.autoPack.every > 0 ? `每 ${snapshot.autoPack.every} 轮` : '', snapshot.autoPack.everyTokens > 0 ? (snapshot.autoPack.everyTokensCustom === false ? `每约 ${snapshot.autoPack.everyTokens} tokens（跟随压缩阈值）` : `每约 ${snapshot.autoPack.everyTokens} tokens`) : ''].filter(Boolean).join(' 或 ')}（已打包 ${snapshot.autoPack.count} 次，当前区间 ${snapshot.autoPack.turnsSince} 轮 / 约 ${snapshot.autoPack.tokensSince} tokens，累计 ${snapshot.autoPack.totalTurns} 轮）` : '已关闭（可在性能模式页设置）'],
         ['上下文压缩', snapshot.contextCompression && snapshot.contextCompression.count > 0 ? `已压缩 ${snapshot.contextCompression.count} 次（累计节省约 ${snapshot.contextCompression.shadowedTokens} tokens）${snapshot.contextCompression.lastAt ? `｜最近 ${formatStamp(snapshot.contextCompression.lastAt)}` : ''}` : '尚未触发（上下文接近模型窗口上限时，较早的对话会自动压缩成记忆块）'],
         ['最近两个聊天日上下文', snapshot.recent ? `${snapshot.recent.count} 条（用户 ${snapshot.recent.userCount} / 角色 ${snapshot.recent.assistantCount}）${snapshot.recent.newestAt ? `｜最新 ${formatStamp(snapshot.recent.newestAt)}` : ''}` : '—'],
         ['记录统计', `记录轮次 ${snapshot.stats.turnsRecorded} · 48h(聊天时间)归纳 ${snapshot.stats.summaries} · 月度打包 ${snapshot.stats.monthlyPackages}`],
@@ -3018,7 +2961,7 @@ window.__ModuleLoader__.load({
             h('li', null, '重要信息原文进入全局活跃记忆，满 30 个聊天交互日后自动归档；次要内容只写简短摘要进知识库。'),
             h('li', null, '好感度是【角色（AI）对用户】的好感度，范围 -100 ~ 100，每次对话结束由 AI 评估并记录理由，不聊天不会自动衰减。'),
             h('li', null, '48 小时（聊天时间）归纳到期后，AI 会在下一轮对话完成时段小结；每满 30 个交互日自动生成月度打包文档。'),
-            h('li', null, '可在知识库页设置「每 N 轮对话自动打包一次」：满 N 轮时系统自动把区间内的重点原文、次要摘要、归纳与好感度变更整理成知识库文档。'),
+            h('li', null, '可在性能模式页设置「每 N 轮对话自动打包一次」：满 N 轮时系统自动把区间内的重点原文、次要摘要、归纳与好感度变更整理成知识库文档。'),
             h('li', null, '知识库归档格式：归档日期：YYYY-MM-DD HH:MM，按日期分组存放。'),
             h('li', null, '最近两个聊天日的原始对话会被缓存，AI 可直接检索原话（聊天时间口径：没聊天的日子不占额度）；超出后自动清理，只保留知识库归档。'),
             h('li', null, '当上下文接近模型窗口上限时，较早的对话会自动压缩成伴侣记忆式的记忆块（重要原文 + 次要摘要 + 好感度变化 + 未完成事项），存进知识库 packs/ 并替换旧对话，长对话可以一直继续下去。'),
@@ -3171,7 +3114,184 @@ window.__ModuleLoader__.load({
       homepage: 'https://github.com/your-name/your-integration',
     }
 
-    /** 自带的 QQ 机器人应用（点开就能用，不依赖 dsh-qqbot）。 */
+    /** 「本地源码」：NapCatQQ 源码 / 构建产物 / 安装版 bundle 的校验、重建、装入、恢复。 */
+    // 数据来自 GET /qq/napcat/source（含后台构建进度），动作都走 POST /qq/napcat/source/*。
+    function NapcatSourceCard() {
+      const [info, setInfo] = useState(null)
+      const [error, setError] = useState('')
+      const [notice, setNotice] = useState('')
+      const [busy, setBusy] = useState('')
+      const [checks, setChecks] = useState(null)
+      const load = useCallback(async () => {
+        try {
+          const next = await apiGet('/qq/napcat/source')
+          setInfo(next)
+          setError('')
+          return next
+        } catch (caught) {
+          setError(caught.message)
+          return null
+        }
+      }, [])
+      useEffect(() => {
+        let alive = true
+        const tick = () => { if (alive) load() }
+        tick()
+        const timer = setInterval(tick, 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [load])
+      const fmtSize = (bytes) => {
+        const value = Number(bytes) || 0
+        if (value <= 0) return '—'
+        if (value >= 1024 * 1024) return (value / 1024 / 1024).toFixed(2) + ' MB'
+        return Math.round(value / 1024) + ' KB'
+      }
+      const act = async (key, path, body) => {
+        setBusy(key)
+        setNotice('')
+        setError('')
+        try {
+          const result = await apiPost(path, body || {})
+          await load()
+          return result
+        } catch (caught) {
+          setError(caught.message)
+          return null
+        } finally {
+          setBusy('')
+        }
+      }
+      const verify = async () => {
+        const result = await act('verify', '/qq/napcat/source/verify', {})
+        if (result) setChecks(result)
+      }
+      const build = async () => {
+        const result = await act('build', '/qq/napcat/source/build', {})
+        if (result && result.message) setNotice(result.message)
+        else if (result && result.started) setNotice('已经开建，进度会自己刷新。重建完再点「装入安装版」。')
+      }
+      const apply = async () => {
+        if (!window.confirm('会先停掉 NapCat、备份现有 bundle，再替换并重新拉起。继续？')) return
+        setBusy('apply')
+        setNotice('')
+        setError('')
+        try {
+          const result = await apiPost('/qq/napcat/source/apply', {})
+          setNotice(result && result.ok
+            ? '已装入 v' + (result.appliedVersion || '?') + ' 并重新拉起（补丁在位）。'
+            : '装完/拉起了，但有一项没对上，往下看校验。')
+          await load()
+        } catch (caught) {
+          setError(caught.message)
+        } finally {
+          setBusy('')
+        }
+      }
+      const restore = async () => {
+        if (!window.confirm('把最近一次「装入」前的备份放回去，并重新拉起 NapCat。继续？')) return
+        setBusy('restore')
+        setNotice('')
+        setError('')
+        try {
+          const result = await apiPost('/qq/napcat/source/restore', {})
+          setNotice(result && result.ok ? '已恢复 ' + result.files + ' 个文件。' : '恢复了，但状态没完全对上。')
+          await load()
+        } catch (caught) {
+          setError(caught.message)
+        } finally {
+          setBusy('')
+        }
+      }
+      const openDir = async (kind) => {
+        try {
+          await apiPost('/qq/napcat/source/open', { kind })
+        } catch (caught) {
+          setError(caught.message)
+        }
+      }
+      const source = (info && info.source) || {}
+      const installed = (info && info.installed) || {}
+      const latest = (info && info.latest) || null
+      const building = (info && info.building) || {}
+      const lastBuild = building.lastBuild || null
+      const row = (label, value) => h('div', { className: 'cm-kv-row' }, h('dt', null, label), h('dd', null, value))
+      const timeText = (iso) => {
+        if (!iso) return '?'
+        try { return new Date(iso).toLocaleString() } catch { return iso }
+      }
+      return h(
+        'section',
+        { className: 'cm-app-card' },
+        h(
+          'div',
+          { className: 'cm-app-card-head' },
+          h('h3', null, '本地源码'),
+          h('span', { className: 'cm-badge' }, building.running ? '构建中…' : (source.exists ? 'v' + (source.version || '?') : '没找到源码')),
+        ),
+        h('p', { className: 'cm-hint' }, 'NapCatQQ 源码放在个人号目录里（体积不算 node_modules 和构建产物）。重建只替换 napcat.mjs、worker 和启动器，native / static / 配置 / node_modules 都复用安装版；源码补丁在位，重建出来不会回复黑框。'),
+        h(
+          'dl',
+          { className: 'cm-kv' },
+          row('源码目录', (info && info.sourceDir) || '—'),
+          row('源码', source.exists ? fmtSize(source.bytes) + ' · ' + source.files + ' 个文件' : '未找到'),
+          row('源码补丁', source.exists ? (source.patched && source.processPatched ? 'windowsHide 补丁在位' : '补丁缺失，重建前先补源码') : '—'),
+          row('安装版', installed.installed ? 'v' + (installed.version || '?') + ' · ' + fmtSize(installed.bytes) : '未安装'),
+          row('安装版补丁', installed.installed ? (installed.patched ? '在位' : '缺失：下次覆盖安装会弹黑框') : '—'),
+          row('最近构建', latest ? 'v' + (latest.version || '?') + ' · ' + timeText(latest.builtAt) + ' · ' + fmtSize(latest.bundleBytes) : '还没构建过'),
+        ),
+        h(
+          'div',
+          { className: 'cm-qq-form' },
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '', onClick: verify }, busy === 'verify' ? '校验中…' : '校验'),
+          h('button', { className: 'cm-btn cm-btn-primary cm-btn-small', type: 'button', disabled: busy !== '' || building.running || !source.exists, onClick: build }, building.running ? '构建中…' : (busy === 'build' ? '启动中…' : '从源码重建')),
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '' || building.running || !(latest && latest.exists), onClick: apply }, busy === 'apply' ? '装入中…' : '装入安装版'),
+          h('button', { className: 'cm-btn cm-btn-small', type: 'button', disabled: busy !== '' || building.running || !(info && info.backups && info.backups.length), onClick: restore }, busy === 'restore' ? '恢复中…' : '恢复上次备份'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: busy !== '', onClick: () => openDir('source') }, '打开源码目录'),
+          h('button', { className: 'cm-btn cm-btn-small cm-btn-ghost', type: 'button', disabled: busy !== '', onClick: () => openDir('dist') }, '打开产物目录'),
+        ),
+        building.running
+          ? h(
+              'div',
+              null,
+              h('p', { className: 'cm-hint' }, '构建中：已用 ' + Math.round((building.elapsedMs || 0) / 1000) + ' 秒。'),
+              building.logTail && building.logTail.length
+                ? h('pre', { style: { maxHeight: 150, overflow: 'auto', fontSize: 12, margin: '6px 0', whiteSpace: 'pre-wrap' } }, building.logTail.join('\n'))
+                : null,
+            )
+          : null,
+        !building.running && lastBuild
+          ? h('p', { className: 'cm-hint' }, '上次构建：' + (lastBuild.ok ? '成功' : '失败') + ' · ' + timeText(lastBuild.endedAt) + (lastBuild.logTail && lastBuild.logTail.length ? ' · ' + lastBuild.logTail[lastBuild.logTail.length - 1] : ''))
+          : null,
+        checks
+          ? h(
+              'div',
+              null,
+              h('p', { className: 'cm-hint' }, checks.ok ? '校验通过：源码、补丁、安装版、构建产物都齐了。' : '有几项没过：'),
+              h(
+                'ul',
+                { className: 'cm-qq-members' },
+                (checks.checks || []).map((item) =>
+                  h(
+                    'li',
+                    { key: item.id, className: 'cm-qq-member' },
+                    h('span', { className: 'cm-qq-name' }, (item.ok ? '✓ ' : '✗ ') + item.label),
+                    h('span', { className: 'cm-muted' }, item.detail || ''),
+                  ),
+                ),
+              ),
+            )
+          : null,
+        notice ? h('p', { className: 'cm-hint' }, notice) : null,
+        error ? h('div', { className: 'cm-banner cm-banner-error' }, error) : null,
+        info && info.builds && info.builds.length
+          ? h('p', { className: 'cm-hint' }, '最近构建：' + info.builds.slice(0, 3).map((item) => 'v' + item.version + ' / ' + fmtSize(item.bundleBytes)).join('；'))
+          : null,
+        info && info.backups && info.backups.length
+          ? h('p', { className: 'cm-hint' }, '备份：' + info.backups.slice(0, 3).map((item) => item.id + (item.version ? '（v' + item.version + '）' : '')).join('；'))
+          : null,
+      )
+    }
+
     function QqbotBuiltinApp(props) {
       const { onBack, channel = 'official' } = props
       const isOneBot = channel === 'onebot'
@@ -4120,7 +4240,9 @@ window.__ModuleLoader__.load({
               h('h3', null, '连接 QQ'),
               h('span', { className: 'cm-badge' }, qqStatus ? ((isOneBot ? qqStatus.onebotConnected : qqStatus.officialConnected) ? '已连接' : (isOneBot ? '未连接' : qqStatus.status || '未连接')) : '读取中…'),
             ),
-            h('p', { className: 'cm-hint' }, '原生连接：AI记忆 自己连 QQ 官方网关（不经过 dsh-qqbot）。同一个机器人只能有一条网关连接，连之前先把 dsh-qqbot 那边的 QQ 停掉，不然会互相顶掉。'),
+            isOneBot
+              ? null
+              : h('p', { className: 'cm-hint' }, '原生连接：AI记忆 自己连 QQ 官方网关（不经过 dsh-qqbot）。同一个机器人只能有一条网关连接，连之前先把 dsh-qqbot 那边的 QQ 停掉，不然会互相顶掉。'),
             isOneBot
               ? h('div', null,
                   h('div', { className: 'cm-qq-form' },
@@ -4153,14 +4275,23 @@ window.__ModuleLoader__.load({
             qqStatus && qqStatus.botName ? h('p', { className: 'cm-hint' }, '机器人：' + qqStatus.botName) : null,
             qqStatus && qqStatus.lastError ? h('p', { className: 'cm-hint' }, '最近错误：' + qqStatus.lastError) : null,
             qqNotice ? h('p', { className: 'cm-hint' }, qqNotice) : null,
-            h(
-              'p',
-              { className: 'cm-hint' },
-              '跳转：',
-              h('a', { className: 'cm-int-link', href: 'https://q.qq.com/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ AI 开放平台 ↗'),
-              ' · ',
-              h('a', { className: 'cm-int-link', href: 'https://bot.q.qq.com/wiki/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ 机器人文档 ↗'),
-            ),
+            isOneBot
+              ? h(
+                  'p',
+                  { className: 'cm-hint' },
+                  '跳转：',
+                  h('a', { className: 'cm-int-link', href: 'https://napcat.napneko.icu/', target: '_blank', rel: 'noreferrer noopener' }, 'NapCat 文档 ↗'),
+                  ' · ',
+                  h('a', { className: 'cm-int-link', href: 'https://github.com/NapNeko/NapCatQQ', target: '_blank', rel: 'noreferrer noopener' }, 'NapCat GitHub ↗'),
+                )
+              : h(
+                  'p',
+                  { className: 'cm-hint' },
+                  '跳转：',
+                  h('a', { className: 'cm-int-link', href: 'https://q.qq.com/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ AI 开放平台 ↗'),
+                  ' · ',
+                  h('a', { className: 'cm-int-link', href: 'https://bot.q.qq.com/wiki/', target: '_blank', rel: 'noreferrer noopener' }, 'QQ 机器人文档 ↗'),
+                ),
             h(
               'div',
               { className: 'cm-app-card-head' },
@@ -4188,6 +4319,7 @@ window.__ModuleLoader__.load({
                   ),
                 ),
           ),
+          isOneBot ? h(NapcatSourceCard) : null,
           h(
             'section',
             { className: 'cm-app-card' },
@@ -6015,13 +6147,18 @@ window.__ModuleLoader__.load({
         setNotice('')
         try {
           const result = await apiPost('/qq/onebot/auto', {})
-          if (!result || result.ok !== true) {
-            setNotice('自动配置失败：' + ((result && result.error) || '未知错误'))
+          if (!result) {
+            setNotice('自动配置失败：没有拿到返回结果')
             return
           }
+          // 没登录不是「失败」：NapCat 已经拉起来了，等扫码就行，别把「需要登录」报成错误。
           if (result.needLogin === true) {
             setQr(result.qr || '')
             setNotice(result.error ? '需要登录：' + result.error : '请用手机 QQ（小号）扫码登录 NapCat，登录后会自动继续')
+            return
+          }
+          if (result.ok !== true) {
+            setNotice('自动配置失败：' + (result.error || '未知错误'))
             return
           }
           setNotice('已自动配置：' + result.wsUrl + '（QQ ' + result.uin + '）')
@@ -6190,6 +6327,7 @@ window.__ModuleLoader__.load({
       const repoName = (item.owner || '') + '/' + (item.repo || '')
       const downloadUrl = typeof item.downloadUrl === 'string' && item.downloadUrl !== '' ? item.downloadUrl : (item.homepage || '')
       const versionText = item.version ? 'GitHub ' + item.version : 'GitHub 暂无 Release'
+      const installed = typeof item.localVersion === 'string' && item.localVersion !== ''
       return h(
         'article',
         { className: 'cm-int-card' },
@@ -6221,23 +6359,24 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'cm-int-card-foot' },
           h('span', { className: 'cm-muted', style: { whiteSpace: 'nowrap' } }, item.publishedAt ? '发布 ' + formatStamp(item.publishedAt) : ''),
-          h(
-            'div',
-            { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
-            h('a', {
-              className: 'cm-btn cm-btn-small cm-btn-primary',
-              href: downloadUrl,
-              target: '_blank',
-              rel: 'noreferrer noopener',
-              download: '',
-              title: item.hasRelease ? '下载 GitHub Release 资产' : '下载 main 分支源码 zip',
-            }, '下载'),
-            h('button', {
-              className: 'cm-btn cm-btn-small',
-              type: 'button',
-              onClick: () => props.onOpen && props.onOpen(item.id),
-            }, '打开'),
-          ),
+          // 右边只留一个按钮、落在第三列靠右：本机装过就是「打开」，没装才是「下载」
+          installed
+            ? h('button', {
+                className: 'cm-btn cm-btn-small cm-btn-primary',
+                type: 'button',
+                style: { gridColumn: '3', justifySelf: 'end' },
+                title: '本机已装 v' + item.localVersion + '，打开看详情',
+                onClick: () => props.onOpen && props.onOpen(item.id),
+              }, '打开')
+            : h('a', {
+                className: 'cm-btn cm-btn-small cm-btn-primary',
+                href: downloadUrl,
+                target: '_blank',
+                rel: 'noreferrer noopener',
+                download: '',
+                style: { gridColumn: '3', justifySelf: 'end' },
+                title: item.hasRelease ? '下载 GitHub Release 资产' : '下载 main 分支源码 zip',
+              }, '下载'),
         ),
       )
     }
@@ -7103,6 +7242,385 @@ window.__ModuleLoader__.load({
     }
     // ── panel ──────────────────────────────────────────────────────────────
 
+    /**
+     * 「性能模式」页：每个对话各自一份（全量工具表 / 团队协作）+ 自动打包频率。
+     * 设置按对话存在 /companion/api/performance?session=…，切到哪个对话改的就是哪个。
+     */
+    function PerformanceTab(props) {
+      const notify = props.notify
+      const snapshot = props.snapshot || null
+      const sessionId = props.sessionId || ''
+      const title = props.title || ''
+      const [perf, setPerf] = useState(null)
+      const [perfError, setPerfError] = useState('')
+      const [autoPack, setAutoPack] = useState(snapshot && snapshot.autoPack ? snapshot.autoPack : null)
+      const [busy, setBusy] = useState('')
+      const packInput = useRef(null)
+      const tokenPackInput = useRef(null)
+
+      const load = useCallback(async () => {
+        try {
+          const value = await apiGet('/performance')
+          setPerf(value)
+          setPerfError('')
+        } catch (error) {
+          setPerfError(error.message)
+        }
+        try {
+          const info = await apiGet('/auto-pack')
+          setAutoPack(info)
+        } catch {
+          // 当前对话没开记忆时读不到自动打包状态，忽略
+        }
+      }, [sessionId])
+
+      useEffect(() => {
+        void load()
+      }, [load])
+
+      useEffect(() => {
+        if (snapshot && snapshot.autoPack) setAutoPack(snapshot.autoPack)
+      }, [snapshot])
+
+      const every = autoPack ? autoPack.every : 0
+      const everyTokens = autoPack ? autoPack.everyTokens || 0 : 0
+
+      useEffect(() => {
+        const input = packInput.current
+        if (input && document.activeElement !== input) input.value = String(every)
+      }, [every])
+
+      useEffect(() => {
+        const input = tokenPackInput.current
+        if (input && document.activeElement !== input) input.value = String(everyTokens)
+      }, [everyTokens])
+
+      const savePerf = useCallback(async (patch) => {
+        setBusy('perf')
+        try {
+          const value = await apiPost('/performance', patch)
+          setPerf(value)
+          notify('性能模式已更新')
+        } catch (error) {
+          notify('保存失败：' + error.message, true)
+        } finally {
+          setBusy('')
+        }
+      }, [notify])
+
+      // 每轮子智能体（操控中心）：配置走 performance 的 ops 字段，运行状态/动作总线走 /companion/ops
+      const [opsState, setOpsState] = useState(null)
+      const loadOpsState = useCallback(async () => {
+        try {
+          const target = sessionId || activeSession
+          const response = await fetch(`/companion/ops/state?session=${encodeURIComponent(target)}`, {
+            headers: { accept: 'application/json' },
+            credentials: 'same-origin',
+          })
+          const payload = await response.json()
+          if (payload && payload.ok === true) setOpsState(payload.value)
+        } catch {
+          // 接口暂时不可用就只显示配置，不报错
+        }
+      }, [sessionId])
+
+      useEffect(() => {
+        void loadOpsState()
+      }, [loadOpsState])
+
+      const saveOps = useCallback(async (patch) => {
+        setBusy('perf')
+        try {
+          const value = await apiPost('/performance', { ops: patch })
+          setPerf(value)
+          notify('子智能体分配已更新')
+          void loadOpsState()
+        } catch (error) {
+          notify('保存失败：' + error.message, true)
+        } finally {
+          setBusy('')
+        }
+      }, [loadOpsState, notify])
+
+      const runOpsNow = useCallback(async () => {
+        setBusy('ops')
+        try {
+          const target = sessionId || activeSession
+          const response = await fetch('/companion/ops/run', {
+            method: 'POST',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ session: target }),
+          })
+          const payload = await response.json()
+          if (!payload || payload.ok !== true) throw new Error((payload && payload.error && payload.error.message) || '接口返回异常')
+          const value = payload.value || {}
+          if (value.ok === false) notify('没写回：' + (value.error || value.skipped || '本轮没有可分析的内容'), true)
+          else notify('已分析本轮')
+          await loadOpsState()
+        } catch (error) {
+          notify('运行失败：' + error.message, true)
+        } finally {
+          setBusy('')
+        }
+      }, [loadOpsState, notify, sessionId])
+
+      const saveAutoPack = useCallback(async () => {
+        const raw = Number(packInput.current ? packInput.current.value : every)
+        if (!Number.isInteger(raw) || raw < 0 || raw > 200) {
+          notify('请输入 0 ~ 200 之间的整数（0 表示关闭）', true)
+          return
+        }
+        try {
+          const value = await apiPost('/auto-pack', { every: raw })
+          setAutoPack(value)
+          notify(value.every > 0 ? `已保存：每 ${value.every} 轮对话自动打包一次` : '已关闭自动打包')
+        } catch (error) {
+          notify(`保存失败：${error.message}（当前对话需要先开启记忆）`, true)
+        }
+      }, [every, notify])
+
+      const saveAutoPackTokens = useCallback(async () => {
+        const raw = Number(tokenPackInput.current ? tokenPackInput.current.value : everyTokens)
+        if (!Number.isInteger(raw) || raw < 0 || raw > 10000000) {
+          notify('请输入 0 ~ 10000000 之间的整数（0 表示关闭）', true)
+          return
+        }
+        try {
+          const value = await apiPost('/auto-pack', { everyTokens: raw })
+          setAutoPack(value)
+          notify(value.everyTokens > 0 ? `已保存：每约 ${value.everyTokens} tokens 自动打包一次` : '已关闭 token 自动打包')
+        } catch (error) {
+          notify(`保存失败：${error.message}（当前对话需要先开启记忆）`, true)
+        }
+      }, [everyTokens, notify])
+
+      const followAutoPackTokens = useCallback(async () => {
+        try {
+          const value = await apiPost('/auto-pack', { everyTokens: null })
+          setAutoPack(value)
+          notify(`已改为跟随上下文压缩阈值：每约 ${value.everyTokens} tokens 打包一次`)
+        } catch (error) {
+          notify(`保存失败：${error.message}`, true)
+        }
+      }, [notify])
+
+      const quickAutoPack = useCallback(async () => {
+        try {
+          const value = await apiPost('/auto-pack', { every: 10, everyTokens: 40000 })
+          setAutoPack(value)
+          notify('已设为：每 10 轮 或 每约 40000 tokens 自动打包')
+        } catch (error) {
+          notify(`保存失败：${error.message}（当前对话需要先开启记忆）`, true)
+        }
+      }, [notify])
+
+      if (perfError && !perf) {
+        return h('div', { className: 'cm-tab-body' }, h('section', { className: 'cm-card' }, h('h3', null, '性能模式'), h('p', { className: 'cm-hint' }, '读取设置失败：' + perfError)))
+      }
+      if (!perf) {
+        return h('div', { className: 'cm-empty' }, '加载中…')
+      }
+
+      const settings = perf.settings || null
+      const presets = perf.presets || []
+      if (!settings) {
+        return h(
+          'div',
+          { className: 'cm-tab-body' },
+          h(
+            'section',
+            { className: 'cm-card' },
+            h('h3', null, '性能模式'),
+            h('p', { className: 'cm-hint' }, '没识别到当前对话：这些开关是每个对话各自一份的，先在对话列表里选一个对话再设置。'),
+          ),
+        )
+      }
+      const toggleRow = (label, hint, checked, onClick) =>
+        h(
+          'label',
+          { className: 'cm-clean-option', style: { margin: '10px 0' }, key: label },
+          h('input', { type: 'checkbox', checked: Boolean(checked), onChange: onClick, disabled: busy === 'perf' }),
+          h('span', null, h('strong', null, label), h('br'), h('span', { className: 'cm-muted' }, hint)),
+        )
+
+      // 「每轮子智能体」块的派生值（描述由 /performance 的 ops 字段给）
+      const ops = settings.ops || null
+      const opsBlocks = ops && Array.isArray(ops.blocks) ? ops.blocks : []
+      const opsModes = ops && Array.isArray(ops.modes) ? ops.modes : []
+      const lastRun = opsState && opsState.lastRun ? opsState.lastRun : null
+      const pendingActions = opsState && opsState.control && Array.isArray(opsState.control.items) ? opsState.control.items.length : 0
+      const lastRunLine = lastRun
+        ? `上次 ${formatStamp(lastRun.at)}｜${lastRun.ms}ms｜情绪 ${lastRun.applied ? lastRun.applied.emotion : 0}、习惯 ${lastRun.applied ? lastRun.applied.style : 0}、记忆 ${lastRun.applied ? lastRun.applied.memory : 0}、动作 ${lastRun.applied ? lastRun.applied.control : 0}${lastRun.spike ? '｜情绪突变' : ''}${lastRun.inertia ? `｜惯性 ${lastRun.inertia} 条` : ''}${lastRun.error ? `｜失败：${lastRun.error}` : ''}`
+        : ''
+      const controlLine = `操控接口（留给桌宠皮套等外部程序）：GET /companion/ops/control/pending?session=…&after=… 取动作，POST /companion/ops/control/ack 确认；当前待取 ${pendingActions} 个。`
+
+      return h(
+        'div',
+        { className: 'cm-tab-body' },
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'div',
+            { className: 'cm-card-head' },
+            h('h3', null, '性能模式'),
+            h('span', { className: 'cm-muted' }, `${title || '当前对话'}｜${settings.presetLabel ? `当前：${settings.presetLabel}` : '当前：自定义'}`),
+          ),
+          h('p', { className: 'cm-hint' }, `这些开关只对「${title || '当前对话'}」生效，别的对话各自一份、互不影响。改完立即生效（不用重启）。全量工具表每一轮会多带约一万七千 token 的工具定义，不勾它只留聊天相关工具就能省下来；团队协作打开后，这个对话里也能开智能体队友，但每个队友都是一次完整的模型调用。`),
+          h(
+            'div',
+            { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+            presets.map((preset) =>
+              h(
+                'button',
+                {
+                  key: preset.key,
+                  type: 'button',
+                  className: 'cm-btn' + (settings.preset === preset.key ? ' cm-btn-primary' : ''),
+                  disabled: busy === 'perf',
+                  onClick: () => savePerf({ preset: preset.key }),
+                  title: preset.hint,
+                },
+                preset.label,
+              ),
+            ),
+          ),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h('div', { className: 'cm-card-head' }, h('h3', null, '开关')),
+          toggleRow('全量工具表', '只对这个对话生效：勾上就是全量工具表，所有工具都放出来（每轮多约一万七千 token）；不勾只留聊天相关工具，省 token。', !settings.leanTools, () => savePerf({ leanTools: !settings.leanTools })),
+          toggleRow('允许智能体团队', '只对这个对话生效：打开后这个对话里可以开队友分工（spawn_teammate 等工具会放行）。默认关。', settings.agentTeam, () => savePerf({ agentTeam: !settings.agentTeam })),
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'div',
+            { className: 'cm-card-head' },
+            h('h3', null, '每轮子智能体（操控中心）'),
+            h(
+              'span',
+              { className: 'cm-muted' },
+              ops ? (ops.enabled ? (ops.mode === 'split' ? '分块调用' : '一次调用') + `｜每轮跑 ${ops.estimatedCalls} 次模型` : '已关闭') : '不可用',
+            ),
+          ),
+          h('p', { className: 'cm-hint' }, '每轮对话结束后单独调一次模型分析这一轮，按下面分配的块写回：情绪直接进情绪表；语言习惯提炼成几句、注入下一轮提示词；记忆像 turn_end 一样自己判断要不要记；操控动作进「动作总线」（留给皮套以后取）。默认跟随当前对话的模型，不额外花钱买新模型。'),
+          ops
+            ? h(
+                'div',
+                null,
+                toggleRow('每轮都调用', '关掉就完全不跑（省 token）；打开后每一轮结束都会自动分析一次。', ops.enabled, () => saveOps({ enabled: !ops.enabled })),
+                h('div', { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+                  opsModes.map((mode) =>
+                    h(
+                      'button',
+                      {
+                        key: mode.key,
+                        type: 'button',
+                        className: 'cm-btn' + (ops.mode === mode.key ? ' cm-btn-primary' : ''),
+                        disabled: busy === 'perf',
+                        onClick: () => saveOps({ mode: mode.key }),
+                        title: mode.hint,
+                      },
+                      mode.label,
+                    ),
+                  ),
+                ),
+                h('div', { className: 'cm-muted', style: { margin: '8px 0 2px' } }, '分配到的块（勾上才写）：'),
+                opsBlocks.map((block) =>
+                  toggleRow(block.label, block.hint, block.enabled, () => saveOps({ blocks: { [block.key]: { enabled: !block.enabled } } })),
+                ),
+                h('div', { className: 'cm-muted', style: { margin: '8px 0 2px' } }, '情绪波动（会不会当场变脸；「一点就炸」会连续气好几轮）：'),
+                h(
+                  'div',
+                  { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+                  (ops.emotionPresets || []).map((preset) =>
+                    h(
+                      'button',
+                      {
+                        key: preset.key,
+                        type: 'button',
+                        className: 'cm-btn' + (ops.emotionTuning && ops.emotionTuning.volatility === preset.key ? ' cm-btn-primary' : ''),
+                        disabled: busy === 'perf',
+                        onClick: () => saveOps({ emotionTuning: { volatility: preset.key } }),
+                        title: preset.hint,
+                      },
+                      preset.label,
+                    ),
+                  ),
+                ),
+                h(
+                  'p',
+                  { className: 'cm-hint' },
+                  ops.emotionTuning
+                    ? `当前：${ops.emotionTuning.label}｜单次最多跳 ${ops.emotionTuning.maxJump} 点、每轮自然回落 ${ops.emotionTuning.decayPerTurn} 点｜${ops.emotionTuning.inject ? '会把「还在气头上」写进下一轮的行为指令，避免一秒冷静' : '不写行为指令（只改情绪表）'}`
+                    : '',
+                ),
+                toggleRow(
+                  '情绪跨对话共享',
+                  '在任意一个对话里被惹到，换个对话、换个人来跟她说话，她也还是那个心情（网页和 QQ 都生效，靠整体情绪 + turn_end 回执带入）。关掉就每个对话各算各的。',
+                  ops.sharedMood !== false,
+                  () => saveOps({ sharedMood: ops.sharedMood === false }),
+                ),
+                h(
+                  'div',
+                  { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+                  h('button', { className: 'cm-btn cm-btn-primary', type: 'button', disabled: busy === 'ops' || !ops.enabled, onClick: runOpsNow }, busy === 'ops' ? '分析中…' : '立即分析本轮'),
+                  lastRunLine ? h('span', { className: 'cm-muted' }, lastRunLine) : null,
+                ),
+                h('p', { className: 'cm-hint' }, controlLine),
+              )
+            : null,
+        ),
+        h(
+          'section',
+          { className: 'cm-card' },
+          h(
+            'div',
+            { className: 'cm-card-head' },
+            h('h3', null, '自动打包'),
+            h(
+              'span',
+              { className: 'cm-muted' },
+              [every > 0 ? `每 ${every} 轮` : '', everyTokens > 0 ? `每约 ${everyTokens} tokens` : ''].filter(Boolean).join(' 或 ') || (autoPack ? '已关闭' : '当前对话未开启记忆'),
+            ),
+          ),
+          h('p', { className: 'cm-hint' }, '设置后，每累计 N 轮真实对话（你发一句 + 角色回一句算 1 轮）或每累计约 N tokens（按你俩消息估算），系统自动把这段时间的重点原文、次要摘要、48 小时（聊天时间）归纳和好感度变更整理成一份「对话自动打包」文档，放进知识库一并检索。tokens 默认跟随「上下文压缩」的触发阈值；填具体数字 = 自定义，填 0 = 关闭 tokens 触发。'),
+          autoPack
+            ? h(
+                'div',
+                { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+                h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: quickAutoPack }, '常用：10 轮 / 40000 tokens'),
+                h('button', { className: 'cm-btn', type: 'button', onClick: followAutoPackTokens }, '跟随压缩阈值'),
+              )
+            : h('p', { className: 'cm-muted' }, '当前对话还没有开启伴侣记忆；先在上方开启，或用下拉框切到已开启的对话再设置。'),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('input', { ref: packInput, className: 'cm-input cm-input-narrow', type: 'number', min: 0, max: 200, step: 1, defaultValue: String(every), 'aria-label': '每多少轮对话自动打包一次' }),
+            h('button', { className: 'cm-btn cm-btn-primary', type: 'button', onClick: saveAutoPack }, '保存轮数'),
+            h('span', { className: 'cm-muted' }, autoPack && every > 0 ? `当前区间 ${autoPack.turnsSince}/${every} 轮，已打包 ${autoPack.count} 次${autoPack.lastPackAt ? `；上次 ${formatStamp(autoPack.lastPackAt)}` : ''}` : autoPack ? `已累计 ${autoPack.totalTurns} 轮对话` : '—'),
+          ),
+          h(
+            'div',
+            { className: 'cm-actions' },
+            h('input', { ref: tokenPackInput, className: 'cm-input cm-input-narrow', type: 'number', min: 0, max: 10000000, step: 1000, defaultValue: String(everyTokens), 'aria-label': '每多少 tokens 自动打包一次' }),
+            h('button', { className: 'cm-btn', type: 'button', onClick: saveAutoPackTokens }, '保存 tokens'),
+            h(
+              'span',
+              { className: 'cm-muted' },
+              autoPack
+                ? (autoPack.everyTokensCustom === false ? '（跟随上下文压缩阈值）' : '') +
+                  (everyTokens > 0 ? `当前区间约 ${autoPack.tokensSince}/${everyTokens} tokens` : `token 触发已关闭，当前区间约 ${autoPack.tokensSince} tokens`)
+                : '—',
+            ),
+          ),
+        ),
+      )
+    }
     const TABS = [
       { id: 'config', label: '配置' },
       { id: 'emotion', label: '情绪' },
@@ -7111,6 +7629,7 @@ window.__ModuleLoader__.load({
       { id: 'backup', label: '备份' },
       { id: 'status', label: '状态' },
       { id: 'overview', label: '总览' },
+      { id: 'performance', label: '性能模式' },
       { id: 'integration', label: '接入软件' },
     ]
 
@@ -7471,6 +7990,8 @@ window.__ModuleLoader__.load({
           h('p', null, '开启后，三份人格文档、好感度、全局活跃记忆、最近两个聊天日上下文与知识库都只属于「' + currentTitle + '」，其他对话各自独立、互不干扰。'),
           h('p', null, '新对话默认是关闭的；你可以在上面的下拉框里切换到别的对话，也可以随时关闭本对话（数据会保留，不会删除）。'),
         )
+      } else if (tab === 'performance') {
+        body = h(PerformanceTab, { snapshot, notify, sessionId, title: currentTitle })
       } else if (tab === 'config') {
         body = h(ConfigTab, { snapshot, refresh, notify })
       } else if (tab === 'emotion') {

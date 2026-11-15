@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Host half of the companion-memory bundle.
  *
  * One plugin instance serves every conversation, but each conversation keeps a
@@ -24,6 +24,10 @@ import { registerHierarchy } from './lib/hierarchy.js'
 import { registerDynamicContext } from './lib/dynamic-context.js'
 import { registerLeanTools } from './lib/lean-tools.js'
 import { installBridgeEndpoint, registerWebApi } from './lib/api.js'
+import { createPerformance } from './lib/performance.js'
+// 每轮子智能体（操控中心）：每轮结束都分析一次，按分配写回 情绪 / 语言习惯 / 记忆，
+// 并产出「操控动作」进 /companion/ops 的动作总线（留给桌宠皮套等外部消费者）。
+import { registerOpsAgent } from './lib/ops-agent.js'
 
 // `webServer` must be a hard dependency: the panel's `/companion/api/*` routes
 // are registered exactly once in `apply`, so a plugin instance that starts
@@ -32,11 +36,18 @@ export const inject = ['systemPrompt', 'tools', 'webServer']
 
 export function apply(ctx, config) {
   const manager = createManager(ctx, config ?? {})
+  // 每个对话各自的「性能模式」设置：工具表精简 / 团队协作 / 睡眠预计算，面板里随时可改
+  try {
+    manager.performance = createPerformance(manager.root || '')
+  } catch {
+    manager.performance = null
+  }
 
   ctx.effect(() => installAgentPrompt(ctx, manager), 'companion-memory: per-conversation prompt sections')
   ctx.effect(() => registerTool(ctx, manager), 'companion-memory: companion_memory tool')
   ctx.effect(() => registerTracking(ctx, manager), 'companion-memory: conversation tracking')
   ctx.effect(() => registerDynamicContext(ctx, manager), 'companion-memory: per-turn dynamic context')
+  ctx.effect(() => registerOpsAgent(ctx, manager), 'companion-memory: per-turn ops sub-agent (emotion/style/memory/control)')
   ctx.effect(() => registerLeanTools(ctx, manager), 'companion-memory: lean toolset for enabled conversations')
   ctx.effect(() => registerContextCompression(ctx, manager, config ?? {}), 'companion-memory: conversation context compression')
   ctx.effect(() => registerHierarchy(ctx, manager), 'companion-memory: hierarchy memory compression')
@@ -68,6 +79,8 @@ export function apply(ctx, config) {
   }, 'companion-memory: qq bridge')
 
   // 插件加载后：没装 NapCat 就预下载；开了个人号通道且 6198 没开，就自动拉起并连上（重启 DSH 后不用手点）
+  // 注意：后台只「死了才拉起」（restart:false）。没扫码登录的时候 NapCat 进程本来就活着，
+  // 这时候要是照常 kill 再拉，就成了每分钟杀一次、二维码一直换、每回还弹一个黑框。
   ctx.effect(() => {
     const timer = setTimeout(async () => {
       try {
@@ -78,7 +91,7 @@ export function apply(ctx, config) {
         const cfg = qq.publicConfig()
         const channels = cfg.channels || {}
         if (channels.onebot !== true) return
-        const result = await setup.autoConfigure()
+        const result = await setup.autoConfigure({ restart: false })
         if (result && result.ok === true && cfg.enabled === true) {
           qq.start().catch(() => {})
         }
@@ -93,7 +106,9 @@ export function apply(ctx, config) {
         const qq = manager.qq()
         const cfg = qq.publicConfig()
         if ((cfg.channels || {}).onebot !== true || state.running === true) return
-        const result = await setup.autoConfigure()
+        // 进程还活着（WebUI 端口通）只是没登录：别动它，等扫码。
+        if (state.webui === true) return
+        const result = await setup.autoConfigure({ restart: false })
         if (result && result.ok === true && cfg.enabled === true) qq.start().catch(() => {})
       } catch { /* ignore */ }
     }, 60000)
