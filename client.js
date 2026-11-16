@@ -3419,7 +3419,7 @@ window.__ModuleLoader__.load({
             // 声纹接口失败不影响 QQ 主面板
           }
           try {
-            const routeInfo = await get('/qq/routes')
+            const routeInfo = await get('/qq/routes?channel=' + (isOneBot ? 'onebot' : 'official'))
             setRoutes(Array.isArray(routeInfo && routeInfo.items) ? routeInfo.items : [])
             setRouteWorkspaces(Array.isArray(routeInfo && routeInfo.workspaces) ? routeInfo.workspaces : [])
             setRouteSessions(Array.isArray(routeInfo && routeInfo.sessions) ? routeInfo.sessions : [])
@@ -3454,7 +3454,7 @@ window.__ModuleLoader__.load({
         } catch (caught) {
           setQqNotice('读取连接状态失败：' + caught.message)
         }
-      }, [])
+      }, [isOneBot])
 
       useEffect(() => {
         setStickerDirDraft((prev) => (prev === '' ? stickerDir || '' : prev))
@@ -3849,7 +3849,7 @@ window.__ModuleLoader__.load({
         } catch (caught) {
           setRouteNotice('保存失败：' + caught.message)
         }
-      }, [bridge, loadQq])
+      }, [bridge, isOneBot, loadQq])
 
       const renamePeerRoute = useCallback(async (key, name) => {
         try {
@@ -3863,24 +3863,24 @@ window.__ModuleLoader__.load({
 
       const forgetPeerRoute = useCallback(async (key) => {
         try {
-          const result = await apiPost('/qq/peers/delete', { key })
+          const result = await apiPost('/qq/peers/delete', { key, channel: isOneBot ? 'onebot' : 'official' })
           setRouteNotice(result && result.removed === true ? '已从列表删掉这条 QQ 聊天（不删记忆；它再发消息还会重新出现）' : '这条 QQ 聊天已经不在列表里了')
           setRoutePickerOpen((open) => (open === key ? '' : open))
           await loadQq()
         } catch (caught) {
           setRouteNotice('删除失败：' + caught.message)
         }
-      }, [loadQq])
+      }, [isOneBot, loadQq])
 
       const setPeerRoute = useCallback(async (key, sessionId) => {
         try {
-          await apiPost('/qq/routes', { key, sessionId })
+          await apiPost('/qq/routes', { key, sessionId, channel: isOneBot ? 'onebot' : 'official' })
           setRouteNotice('已保存：这条 QQ 聊天走指定会话')
           await loadQq()
         } catch (caught) {
           setRouteNotice('保存失败：' + caught.message)
         }
-      }, [loadQq])
+      }, [isOneBot, loadQq])
 
       const saveVoiceprint = useCallback(async () => {
         setVpBusy(true)

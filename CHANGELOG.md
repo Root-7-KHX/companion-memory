@@ -1,6 +1,29 @@
 # 更新记录
 
-## 未发布
+## 1.3.1 — 2026-11-16
+
+### 新增：NapCat 本地源码卡（个人号接入页）
+
+- 「个人号接入」页多一张「本地源码」卡：校验 / 重建 / 装入 / 恢复四个动作，源码放 `D:\AI\NapCat\source\NapCatQQ`（不塞进插件包），一条 `build.mjs` 重建出 `napcat.mjs`，装入后直接覆盖安装版。
+- 新增 `lib/napcat-source.js` 与 `/companion/api/qq/napcat/source|build|apply|restore` 接口；构建产物四文件 SHA256 与环境版本一起显示。
+
+### 新增：群聊分条气泡
+
+- 群聊回复按行拆成多条气泡发送：一行一条；超过 4 行时前 3 行各一条、剩下的并进第 4 条（防刷屏）；私聊不设上限，一行一条。
+- 只动出站排版，不改模型输出；拆条在 `lib/qq-bridge.js` 的 `flushReply` 里做。
+
+### 新增：群聊不再必须 @
+
+- `onebot.requireMention` 改为 false：群聊里不 @ 也会回。想恢复「只有 @ 才回」，把 `qq-bot.json` 里 `onebot.requireMention` 改回 true。
+
+### 变更：两条 QQ 通道的配置各存一份
+
+- 路由表（每条聊天绑哪个 AI）和「默认新建会话建在」按 official / onebot 分开存：`qq-bridge.json` 新增 `perChannel`，`saveConfig` 带 channel 时只写那一份，不再覆盖另一条通道；顶层字段保留给旧版兼容。
+- `/qq/routes` 认 `channel` 参数，`replacePeerSessions` 按通道写。
+
+### 修复：官方通道历史死键
+
+- 清掉官方通道 `peerSessions` 里 7 条迁移前不带前缀的死键（`c2c:` / `group:` 开头、永远命不中），只留 `official:c2c:...`。
 
 ### 新增：每轮子智能体（操控中心）+ 操控动作总线
 
