@@ -38,7 +38,7 @@ const d = describeOps({})
 check('默认三块开', d.activeBlocks.join(',') === 'emotion,style,memory', d.activeBlocks)
 check('estimatedCalls=1（single）', d.estimatedCalls === 1, d.estimatedCalls)
 const d2 = describeOps({ mode: 'split' })
-check('split 时 = 3', d2.estimatedCalls === 3, d2.estimatedCalls)
+check('split 时 = 2（语言习惯是提示层，不调用）', d2.estimatedCalls === 2, d2.estimatedCalls)
 check('blocks 带 label', Array.isArray(d.blocks) && d.blocks[0].label === '情绪', d.blocks && d.blocks[0])
 
 console.log('── 4. 假宿主：跑一轮，看四个块有没有写回')
@@ -84,7 +84,7 @@ check('模型被调 1 次（single）', calls.length === 1, calls.length)
 check('情绪写回只保留已知情绪', written.emotions && written.emotions.emotions && written.emotions.emotions.开心 === 72 && written.emotions.emotions['不存在的情绪'] === undefined, written.emotions)
 check('记忆写回带子智能体标签', written.memories.length === 1 && written.memories[0].tags.includes('子智能体'), written.memories)
 const state = agent.state('session-test')
-check('语言习惯落盘 2 条', state.style.lines.length === 2, state.style)
+check('语言习惯不再被单独调用（提示层，state 里也不写）', state.style.lines.length === 0, state.style)
 check('动作队列只收合法 type', state.control.items.length === 1 && state.control.items[0].type === 'expression', state.control)
 check('lastRun 有统计', state.lastRun && state.lastRun.applied.emotion === 1 && state.lastRun.applied.control === 1, state.lastRun)
 const pending = agent.pending('session-test', 0)
@@ -115,9 +115,66 @@ const ctx2 = {
 const manager2 = { ...manager, performance: { get: () => ({ ops: normalizeOps({ enabled: true, mode: 'split', blocks: { control: { enabled: true } } }) }) } }
 const agent2 = createOpsAgent(ctx2, manager2)
 const result2 = await agent2.run('session-test')
-check('split 调 4 次', calls2.length === 4, calls2.length)
+check('split 调 3 次（语言习惯是提示层，不调用）', calls2.length === 3, calls2.length)
 check('split run ok', result2.ok === true, result2)
 agent2.dispose()
+
+console.log('── 5.5 团队模式：真的开子智能体（假 subagents 服务）')
+const teamOps = normalizeOps({ enabled: true, mode: 'split', team: true, blocks: { control: { enabled: true } } })
+const starts = []
+const teamStore = { ...store, dir: join(root, 'session-team') }
+mkdirSync(teamStore.dir, { recursive: true })
+const teamReplies = [
+  JSON.stringify({ emotion: { changes: { 开心: 55 } } }),
+  JSON.stringify({ memory: { items: [{ text: '团队模式记一条', tags: ['事件'] }] } }),
+  JSON.stringify({ control: { actions: [{ type: 'expression', payload: { name: '爱心眼' } }] } }),
+]
+let teamIndex = 0
+const ctxTeam = {
+  get(name) {
+    if (name === 'subagents') return {
+      getProvider: (provider) => ({ name: provider }),
+      startActivation: async (spec) => {
+        starts.push(spec)
+        const text = teamReplies[Math.min(teamIndex++, teamReplies.length - 1)]
+        return { childId: 'child-' + starts.length, name: 'child-' + starts.length, result: Promise.resolve({ output: [{ type: 'text', text }], stopReason: 'completed' }) }
+      },
+    }
+    if (name === 'agents') return { get: (id) => ({ id }) }
+    if (name === 'llm') throw new Error('团队模式不该走内部 llm 请求')
+    if (name === 'systemPrompt') return { context: () => () => {} }
+    if (name === 'webServer') return { register: () => () => {} }
+    return undefined
+  },
+  on() { return () => {} },
+}
+const teamManager = { ...manager, storeFor: () => teamStore, performance: { get: () => ({ ops: teamOps }) } }
+const teamAgent = createOpsAgent(ctxTeam, teamManager)
+check('normalizeOps 保留 team/teamProvider', teamOps.team === true && teamOps.teamProvider === 'spawn', [teamOps.team, teamOps.teamProvider])
+const teamResult = await teamAgent.run('session-test')
+check('团队模式开了 3 个子智能体', starts.length === 3, starts.length)
+check('子智能体 label 带块名', starts[0] && starts[0].label === '大肥鱼·情绪', starts[0] && starts[0].label)
+check('子智能体走 spawn、挂在当前对话下', starts[0] && starts[0].provider === 'spawn' && starts[0].parent && starts[0].parent.id === 'session-test', starts[0] && { provider: starts[0].provider, parent: starts[0].parent })
+check('团队模式 run ok、lastRun.team', teamResult.ok === true && teamResult.team === true, teamResult)
+check('团队模式结果写回记忆', teamAgent.state('session-test').lastRun.applied.memory === 1 && teamAgent.state('session-test').lastRun.applied.emotion === 1, teamAgent.state('session-test').lastRun)
+teamAgent.dispose()
+
+// 团队模式但宿主没有 subagents（老版本/未启用）：自动退回内部请求，不炸
+const fallbackCalls = []
+const ctxNoTeam = {
+  get(name) {
+    if (name === 'llm') return { stream: async function* () { fallbackCalls.push(name); yield { type: 'text-delta', text: JSON.stringify({ emotion: { changes: { 开心: 40 } } }) }; yield { type: 'finish', reason: { kind: 'ok' } } } }
+    if (name === 'systemPrompt') return { context: () => () => {} }
+    if (name === 'webServer') return { register: () => () => {} }
+    return undefined
+  },
+  on() { return () => {} },
+}
+const fallbackManager = { ...manager, performance: { get: () => ({ ops: normalizeOps({ enabled: true, mode: 'single', team: true }) }) } }
+const fallbackAgent = createOpsAgent(ctxNoTeam, fallbackManager)
+const fallbackResult = await fallbackAgent.run('session-test')
+check('没有 subagents 服务时退回内部请求', fallbackCalls.length === 1 && fallbackResult.ok === true, { calls: fallbackCalls.length, ok: fallbackResult.ok })
+fallbackAgent.dispose()
 
 console.log('── 6. performance.js：ops 默认值与补丁合并')
 const perfMod = await import(pathToFileURL(join(LIB_DIR, 'performance.js')).href)
@@ -238,6 +295,98 @@ check('mood() 能读到跨对话情绪', Array.isArray(moodNow.spikes) && moodNo
 const directive = otherAgent.moodDirective('session-other')
 check('moodDirective 带跨对话说明', typeof directive === 'string' && directive.includes('整体情绪') && directive.includes('跨对话共享'), directive)
 otherAgent.dispose()
+
+console.log('── 9. 互喂分块（staged）：先并行出初稿，再带着黑板互相定稿')
+const stagedNorm = normalizeOps({ mode: 'staged' })
+check('mode staged 保留', stagedNorm.mode === 'staged', stagedNorm.mode)
+check('staged 默认 refine = emotion,memory', stagedNorm.staged.refine.join(',') === 'emotion,memory', stagedNorm.staged)
+check('staged rounds 默认 2', stagedNorm.staged.rounds === 2)
+check('rounds 夹到 2~4', normalizeOps({ staged: { rounds: 9 } }).staged.rounds === 4 && normalizeOps({ staged: { rounds: 0 } }).staged.rounds === 2)
+const stagedDesc = describeOps({ mode: 'staged', blocks: { control: { enabled: false } } })
+check('语言习惯块标了 hintOnly', stagedDesc.blocks.find((b) => b.key === 'style').hintOnly === true)
+check('callBlocks 里没有语言习惯', stagedDesc.callBlocks.join(',') === 'emotion,memory', stagedDesc.callBlocks)
+check('staged 估算调用 = 2 块 + 2 互喂 = 4', stagedDesc.estimatedCalls === 4, stagedDesc.estimatedCalls)
+check('describeOps 带 stagedPlan', stagedDesc.stagedPlan && stagedDesc.stagedPlan.refine.join(',') === 'emotion,memory', stagedDesc.stagedPlan)
+const plan4 = opsMod.stagedPlan({ mode: 'staged' }, ['emotion', 'style', 'memory', 'control'])
+check('stagedPlan 只挑活跃块里的互喂块，提示层不占调用', plan4.refine.join(',') === 'emotion,memory' && plan4.calls === 5, plan4)
+
+const promptOf = (request) => request.messages
+  .map((message) => (Array.isArray(message.content) ? message.content.map((part) => part.text || '').join('') : ''))
+  .join('\n')
+const makeStageReply = (request) => {
+  const prompt = promptOf(request)
+  const later = prompt.includes('第 2 轮') || prompt.includes('第 3 轮')
+  if (prompt.includes('- emotion（情绪')) return JSON.stringify({ emotion: { changes: { 难过: later ? 66 : 40 }, reason: later ? '记忆挑出的那句原话太扎心' : '初稿' } })
+  if (prompt.includes('- memory（记忆）')) return JSON.stringify({ memory: { items: [{ text: later ? '他说过「不会再来了」' : '初稿记忆', tags: ['事件'] }] } })
+  return JSON.stringify({ style: { lines: ['说话短'] } })
+}
+const makeStagedHost = (bucket) => ({
+  get(name) {
+    if (name === 'llm') {
+      return {
+        stream: async function* (request) {
+          bucket.push(request)
+          yield { type: 'text-delta', text: makeStageReply(request) }
+          yield { type: 'finish', reason: { kind: 'ok' } }
+        },
+      }
+    }
+    if (name === 'systemPrompt') return { context: () => () => {} }
+    if (name === 'webServer') return { register: () => () => {} }
+    return undefined
+  },
+  on() { return () => {} },
+})
+const stagedDir = join(root, 'session-staged')
+mkdirSync(stagedDir, { recursive: true })
+const stagedWritten = { emotions: null, memories: [] }
+const stagedStore = {
+  dir: stagedDir,
+  state: { lastUserMessageAt: '2026-11-14T09:00:00.000Z' },
+  recent: { entries: [{ role: 'user', text: '你昨天说的话还算数吗' }, { role: 'assistant', text: '……' }] },
+  emotionTypesSnapshot: () => [{ key: 'sad', label: '难过' }, { key: 'happy', label: '开心' }],
+  setEmotions: (input) => { stagedWritten.emotions = input; return { changes: input.emotions, reason: input.reason } },
+  addMemory: (text, tags, meta) => { stagedWritten.memories.push({ text, tags, meta }); return { id: 'mem_staged', text } },
+}
+const stagedManager = {
+  root,
+  isEnabled: () => true,
+  storeFor: () => stagedStore,
+  currentSession: () => 'session-staged',
+  performance: { get: () => ({ ops: normalizeOps({ enabled: true, mode: 'staged', blocks: { control: { enabled: false } } }) }) },
+}
+const stageReq = []
+const stagedAgent = opsMod.createOpsAgent(makeStagedHost(stageReq), stagedManager)
+const stagedRun = await stagedAgent.run('session-staged')
+const round1 = stageReq.filter((request) => !promptOf(request).includes('第 2 轮'))
+const round2 = stageReq.filter((request) => promptOf(request).includes('第 2 轮'))
+check('一共 4 次调用（2 并行 + 2 互喂；语言习惯不调用）', stageReq.length === 4, stageReq.length)
+check('第 1 轮只有情绪和记忆各一次', round1.length === 2 && !round1.some((request) => promptOf(request).includes('- style（语言习惯')), round1.length)
+check('第 2 轮只有情绪和记忆', round2.length === 2 && !round2.some((request) => promptOf(request).includes('- style（语言习惯')), round2.length)
+const emoPrompt2 = promptOf(round2.filter((request) => promptOf(request).includes('- emotion（情绪'))[0] || { messages: [] })
+const memPrompt2 = promptOf(round2.filter((request) => promptOf(request).includes('- memory（记忆'))[0] || { messages: [] })
+check('情绪第 2 轮看得到记忆的初稿', emoPrompt2.includes('初稿记忆') && emoPrompt2.includes('【黑板】'), emoPrompt2.slice(0, 200))
+check('记忆第 2 轮看得到情绪的初稿', memPrompt2.includes('难过') && memPrompt2.includes('【黑板】'), memPrompt2.slice(0, 200))
+check('语言习惯不进黑板（辅助层不主导）', !emoPrompt2.includes('说话短') && !memPrompt2.includes('说话短'))
+check('情绪按记忆定稿（40 -> 66）', stagedWritten.emotions && stagedWritten.emotions.emotions['难过'] === 66, stagedWritten.emotions)
+check('记忆被情绪影响后定稿', stagedWritten.memories.length === 1 && stagedWritten.memories[0].text.includes('不会再来了'), stagedWritten.memories)
+check('lastRun 记了 staged + 调用次数', stagedRun.mode === 'staged' && stagedRun.calls === 4 && stagedRun.staged && stagedRun.staged.refine.join(',') === 'emotion,memory', stagedRun)
+stagedAgent.dispose()
+
+// 第 3 轮：情绪会看到记忆在第 2 轮改过的那版，迭代两次
+const stageReq3 = []
+const staged3Agent = opsMod.createOpsAgent(makeStagedHost(stageReq3), {
+  ...stagedManager,
+  storeFor: () => ({ ...stagedStore, dir: join(stagedDir, 'round3'), setEmotions: () => ({ changes: {} }), addMemory: () => null, emotionSnapshot: () => ({ types: [], reason: '' }) }),
+  performance: { get: () => ({ ops: normalizeOps({ enabled: true, mode: 'staged', staged: { rounds: 3 }, blocks: { control: { enabled: false }, style: { enabled: false } } }) }) },
+})
+mkdirSync(join(stagedDir, 'round3'), { recursive: true })
+const staged3Run = await staged3Agent.run('session-staged')
+check('rounds=3 时调用 2 块 + 2 轮互喂 = 6', stageReq3.length === 6, stageReq3.length)
+check('最后一轮是第 3 轮', promptOf(stageReq3[stageReq3.length - 1]).includes('第 3 轮'), promptOf(stageReq3[stageReq3.length - 1]).slice(0, 120))
+check('第 3 轮看得到第 2 轮的定稿', promptOf(stageReq3[stageReq3.length - 1]).includes('66'), promptOf(stageReq3[stageReq3.length - 1]).slice(0, 300))
+check('rounds=3 的 lastRun.calls', staged3Run.calls === 6, staged3Run.calls)
+staged3Agent.dispose()
 
 rmSync(root, { recursive: true, force: true })
 rmSync(perfRoot, { recursive: true, force: true })

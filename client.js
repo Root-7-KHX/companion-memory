@@ -428,6 +428,22 @@ window.__ModuleLoader__.load({
       return unwrap(response)
     }
 
+    /**
+     * 直接把文件本身当请求体 POST 上去（不先读成字符串、也不 JSON.stringify 一遍）。
+     * 导入几百兆的导出文档时，这一步能把浏览器内存压力砍一半。
+     */
+    async function apiPostFile(path, file) {
+      const glue = path.includes('?') ? '&' : '?'
+      const url = activeSession === '' ? `${API_BASE}${path}` : `${API_BASE}${path}${glue}session=${encodeURIComponent(activeSession)}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: file,
+      })
+      return unwrap(response)
+    }
+
     function clockLabel() {
       const now = new Date()
       const pad = (value) => String(value).padStart(2, '0')
@@ -2726,6 +2742,27 @@ window.__ModuleLoader__.load({
         if (!file) return
         setBusy('read')
         try {
+          const sizeMb = file.size / (1024 * 1024)
+          // 超大文档不先整份读进内存做预览：直接带着文件本身去导入，服务端那边流式收。
+          if (file.size > 64 * 1024 * 1024) {
+            setImported({
+              fileName: file.name,
+              exportedAt: '未预览',
+              sourceTitle: '未预览',
+              favorability: 0,
+              interactionDays: 0,
+              activeMemories: 0,
+              files: 0,
+              docs: 0,
+              conversationMessages: 0,
+              conversationChars: 0,
+              file,
+              heavy: true,
+              sizeText: `${sizeMb.toFixed(1)} MB`,
+            })
+            notify(`文件 ${sizeMb.toFixed(1)} MB，已跳过预览，可直接点导入。`)
+            return
+          }
           const text = await file.text()
           let parsed = null
           try {
@@ -2753,6 +2790,7 @@ window.__ModuleLoader__.load({
             conversationChars: Array.isArray(parsed.conversation?.messages)
               ? parsed.conversation.messages.reduce((sum, message) => sum + String(message?.text ?? '').length, 0)
               : 0,
+            file,
             bundle: parsed,
           })
           notify('已读取记忆文档，请确认下面的摘要后点击导入。')
@@ -2772,12 +2810,19 @@ window.__ModuleLoader__.load({
         }
         setBusy('import')
         try {
-          const result = await apiPost('/import', {
-            bundle: imported.bundle,
-            merge: overwrite ? false : true,
-            cleanMemory: cleanMemory === true,
-            digestChat: digestChat === true,
-          })
+          // 超过 64MB 的文档走 /import/raw：文件本身当请求体直接流给服务端，
+          // 不在浏览器里 JSON.stringify 一遍（否则光这一步就能把标签页卡死）。
+          const result = imported.file
+            ? await apiPostFile(
+                `/import/raw?merge=${overwrite ? '0' : '1'}&cleanMemory=${cleanMemory === true ? '1' : '0'}&digestChat=${digestChat === true ? '1' : '0'}`,
+                imported.file,
+              )
+            : await apiPost('/import', {
+                bundle: imported.bundle,
+                merge: overwrite ? false : true,
+                cleanMemory: cleanMemory === true,
+                digestChat: digestChat === true,
+              })
           const clean = result.clean
           let cleanText = ''
           if (clean && !clean.error) {
@@ -2850,17 +2895,19 @@ window.__ModuleLoader__.load({
             ? h(
                 'div',
                 { className: 'cm-import-preview' },
-                h('div', { className: 'cm-muted' }, `文件：${imported.fileName}`),
-                h('dl', { className: 'cm-kv' },
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '导出时间'), h('dd', null, imported.exportedAt)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '来源对话'), h('dd', null, imported.sourceTitle)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '好感度（角色对用户）'), h('dd', null, signed(imported.favorability))),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天交互日'), h('dd', null, `${imported.interactionDays} 个`)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '活跃记忆'), h('dd', null, `${imported.activeMemories} 条`)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '知识库文件'), h('dd', null, `${imported.files} 个`)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '人格文档'), h('dd', null, `${imported.docs} 份`)),
-                  h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条${imported.conversationChars ? `（约 ${Math.round(imported.conversationChars / 1000)}k 字）` : ''}`)),
-                ),
+                h('div', { className: 'cm-muted' }, `文件：${imported.fileName}${imported.sizeText ? `（${imported.sizeText}）` : ''}`),
+                imported.heavy
+                  ? h('p', { className: 'cm-muted' }, '文件太大，已跳过预览：正文会原样流给服务端，导入后以结果为准。')
+                  : h('dl', { className: 'cm-kv' },
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '导出时间'), h('dd', null, imported.exportedAt)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '来源对话'), h('dd', null, imported.sourceTitle)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '好感度（角色对用户）'), h('dd', null, signed(imported.favorability))),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天交互日'), h('dd', null, `${imported.interactionDays} 个`)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '活跃记忆'), h('dd', null, `${imported.activeMemories} 条`)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '知识库文件'), h('dd', null, `${imported.files} 个`)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '人格文档'), h('dd', null, `${imported.docs} 份`)),
+                      h('div', { className: 'cm-kv-row' }, h('dt', null, '聊天原文'), h('dd', null, `${imported.conversationMessages || 0} 条${imported.conversationChars ? `（约 ${Math.round(imported.conversationChars / 1000)}k 字）` : ''}`)),
+                    ),
                 h('p', { className: 'cm-muted' }, '选一个导入方式：合并会保留当前已有内容，只补充缺的；覆盖会用这份文档替换当前对话的记忆。'),
                 h(
                   'label',
@@ -3333,6 +3380,9 @@ window.__ModuleLoader__.load({
       const [bridge, setBridge] = useState(null)
       const [bridgeDraft, setBridgeDraft] = useState('')
       const [bridgeNotice, setBridgeNotice] = useState('')
+      // 「攒消息再回」：私聊里 TA 连着发几条，等静默这么久再合成一波回（秒；0 = 不攒）
+      const [inboundMergeDraft, setInboundMergeDraft] = useState('5')
+      const inboundMergeEditing = useRef(false)
       // 「我的账号（用户）」：绑定一个 QQ 账号当用户，其他人的私聊各自单独一个说话人
       const [ownerSaving, setOwnerSaving] = useState(false)
       const [ownerNotice, setOwnerNotice] = useState('')
@@ -3388,6 +3438,10 @@ window.__ModuleLoader__.load({
             get('/qq/proactive'),
           ])
           setBridge(bridgeInfo)
+          if (!inboundMergeEditing.current) {
+            const mergeSeconds = String(Math.round((Number(bridgeInfo && bridgeInfo.inboundMergeMs) || 5000) / 1000))
+            setInboundMergeDraft((prev) => (prev === mergeSeconds ? prev : mergeSeconds))
+          }
           setQqSessions(Array.isArray(sessionList && sessionList.items) ? sessionList.items : [])
           setQqSessionGroups(Array.isArray(sessionList && sessionList.groups) ? sessionList.groups : [])
           setQqPeers(Array.isArray(peerInfo && peerInfo.items) ? peerInfo.items : [])
@@ -3706,6 +3760,23 @@ window.__ModuleLoader__.load({
           setBridgeNotice('保存失败：' + error.message)
         }
       }, [bridgeDraft, bridge, loadQq])
+
+      const saveInboundMerge = useCallback(async () => {
+        const seconds = Math.max(0, Math.min(60, Math.round(Number(inboundMergeDraft) || 0)))
+        try {
+          const next = await apiPost('/qq/bridge', {
+            channel: isOneBot ? 'onebot' : 'official',
+            sessionId: bridgeDraft !== '' ? bridgeDraft : (bridge && bridge.sessionId) || '',
+            inboundMergeMs: seconds * 1000,
+          })
+          setBridge(next)
+          setInboundMergeDraft(String(seconds))
+          setBridgeNotice(seconds === 0 ? '已保存：不攒，来一条回一条' : '已保存：私聊静默 ' + seconds + ' 秒后一次性回')
+          await loadQq()
+        } catch (error) {
+          setBridgeNotice('保存失败：' + error.message)
+        }
+      }, [bridgeDraft, bridge, inboundMergeDraft, isOneBot, loadQq])
 
       const saveOwner = useCallback(async (openId) => {
         setOwnerSaving(true)
@@ -4167,6 +4238,27 @@ window.__ModuleLoader__.load({
             ),
             bridgeNotice ? h('p', { className: 'cm-hint' }, bridgeNotice) : null,
             bridge && bridge.lastPeer ? h('p', { className: 'cm-hint' }, '最近 QQ 会话：' + bridge.lastPeer.scope + ' · ' + String(bridge.lastPeer.peerId).slice(0, 12) + '… · 待审批 ' + bridge.pendingApprovals) : null,
+            h('div', { style: { borderTop: '1px solid rgba(127,127,127,0.25)', margin: '10px 0 6px' } }),
+            h('p', { className: 'cm-hint' }, '攒消息再回：你在私聊里连着发几条时，等我停下静默这么久，才把这几条合成一波一起回——不是来一条就叫醒我一次。最多攒 5 条就先回一波；你要是先说「先听我说 / 等我说完」，那我就等你说完、静默 10 秒再一次性回，不限条数。群聊不受影响，还是谁说话回谁。默认 5 秒。'),
+            h(
+              'div',
+              { className: 'cm-qq-form' },
+              h('span', { className: 'cm-hint' }, '私聊静默'),
+              h('input', {
+                className: 'cm-input',
+                type: 'number',
+                min: '0',
+                max: '60',
+                step: '1',
+                style: { flex: '0 0 90px', width: '90px' },
+                value: inboundMergeDraft,
+                onFocus: () => { inboundMergeEditing.current = true },
+                onBlur: () => { inboundMergeEditing.current = false },
+                onChange: (event) => setInboundMergeDraft(event.target.value),
+              }),
+              h('span', { className: 'cm-hint' }, '秒（0 = 不攒，来一条回一条）'),
+              h('button', { className: 'cm-btn cm-btn-small', type: 'button', onClick: saveInboundMerge }, '保存'),
+            ),
           ),
           h(
             'section',
@@ -7451,7 +7543,7 @@ window.__ModuleLoader__.load({
       const lastRun = opsState && opsState.lastRun ? opsState.lastRun : null
       const pendingActions = opsState && opsState.control && Array.isArray(opsState.control.items) ? opsState.control.items.length : 0
       const lastRunLine = lastRun
-        ? `上次 ${formatStamp(lastRun.at)}｜${lastRun.ms}ms｜情绪 ${lastRun.applied ? lastRun.applied.emotion : 0}、习惯 ${lastRun.applied ? lastRun.applied.style : 0}、记忆 ${lastRun.applied ? lastRun.applied.memory : 0}、动作 ${lastRun.applied ? lastRun.applied.control : 0}${lastRun.spike ? '｜情绪突变' : ''}${lastRun.inertia ? `｜惯性 ${lastRun.inertia} 条` : ''}${lastRun.error ? `｜失败：${lastRun.error}` : ''}`
+        ? `上次 ${formatStamp(lastRun.at)}｜${lastRun.ms}ms${lastRun.calls ? `｜${lastRun.calls} 次调用` : ''}｜情绪 ${lastRun.applied ? lastRun.applied.emotion : 0}、习惯 ${lastRun.applied ? lastRun.applied.style : 0}、记忆 ${lastRun.applied ? lastRun.applied.memory : 0}、动作 ${lastRun.applied ? lastRun.applied.control : 0}${lastRun.spike ? '｜情绪突变' : ''}${lastRun.inertia ? `｜惯性 ${lastRun.inertia} 条` : ''}${lastRun.error ? `｜失败：${lastRun.error}` : ''}`
         : ''
       const controlLine = `操控接口（留给桌宠皮套等外部程序）：GET /companion/ops/control/pending?session=…&after=… 取动作，POST /companion/ops/control/ack 确认；当前待取 ${pendingActions} 个。`
 
@@ -7504,15 +7596,50 @@ window.__ModuleLoader__.load({
             h(
               'span',
               { className: 'cm-muted' },
-              ops ? (ops.enabled ? (ops.mode === 'split' ? '分块调用' : '一次调用') + `｜每轮跑 ${ops.estimatedCalls} 次模型` : '已关闭') : '不可用',
+              ops
+                ? (ops.enabled
+                  ? ((opsModes.filter((mode) => mode.key === ops.mode).map((mode) => mode.label)[0] || ops.mode) +
+                    `｜每轮跑 ${ops.estimatedCalls} 次模型` +
+                    (ops.team !== false ? `｜子智能体 ${ops.teamAgents}` : '｜插件内部请求') +
+                    (ops.mode === 'staged' && ops.stagedPlan && Array.isArray(ops.stagedPlan.refine) && ops.stagedPlan.refine.length > 0
+                      ? `｜互喂：${ops.stagedPlan.refine.map((key) => (opsBlocks.filter((block) => block.key === key).map((block) => block.label)[0] || key)).join('↔')}`
+                      : ''))
+                  : '已关闭')
+                : '不可用',
             ),
           ),
-          h('p', { className: 'cm-hint' }, '每轮对话结束后单独调一次模型分析这一轮，按下面分配的块写回：情绪直接进情绪表；语言习惯提炼成几句、注入下一轮提示词；记忆像 turn_end 一样自己判断要不要记；操控动作进「动作总线」（留给皮套以后取）。默认跟随当前对话的模型，不额外花钱买新模型。'),
+          h('p', { className: 'cm-hint' }, '每轮对话结束后单独调一次模型分析这一轮，按下面分配的块写回：情绪直接进情绪表；记忆像 turn_end 一样自己判断要不要记；操控动作进「动作总线」（留给皮套以后取）。语言习惯只是提示层：不单独调用、不占调用次数，只把「该怎么说话」注进回话上下文。默认跟随当前对话的模型，不额外花钱买新模型。'),
           ops
             ? h(
                 'div',
                 null,
                 toggleRow('每轮都调用', '关掉就完全不跑（省 token）；打开后每一轮结束都会自动分析一次。', ops.enabled, () => saveOps({ enabled: !ops.enabled })),
+                toggleRow('用真实子智能体跑（智能体团队）', `打开后每次运行会真的开 ${ops.teamAgents || ops.estimatedCalls} 个 DSH 子智能体会话（聊天里能看到卡片，用这个对话的模型），每个子智能体都是一次完整的模型调用；关掉就是插件内部一次请求（看不见、最省）。`, ops.team !== false, () => saveOps({ team: ops.team === false })),
+                ops.team !== false
+                  ? toggleRow('常驻复用（一个块只建一个子智能体）', `打开后每个块只在第一次跑时建一次子智能体，之后每轮只给它发消息续聊，会话里的子智能体数量就固定了、不会再涨；关掉就是以前那样每轮都新建（数量会一直涨）。`, ops.teamResident !== false, () => saveOps({ teamResident: ops.teamResident === false }))
+                  : null,
+                ops.team !== false && ops.teamResident !== false
+                  ? h('div', { className: 'cm-muted', style: { margin: '8px 0 2px' } }, `每个子智能体每轮只看最近 ${ops.teamWindow || 3} 轮对话，更早的靠它自己那份小记忆（自动压缩，不会越积越大）：`)
+                  : null,
+                ops.team !== false && ops.teamResident !== false
+                  ? h(
+                      'div',
+                      { className: 'cm-actions', style: { flexWrap: 'wrap' } },
+                      [2, 3, 4, 6].map((n) =>
+                        h(
+                          'button',
+                          {
+                            key: n,
+                            type: 'button',
+                            className: 'cm-btn' + ((ops.teamWindow || 3) === n ? ' cm-btn-primary' : ''),
+                            disabled: busy === 'perf',
+                            onClick: () => saveOps({ teamWindow: n }),
+                          },
+                          `${n} 轮`,
+                        ),
+                      ),
+                    )
+                  : null,
                 h('div', { className: 'cm-actions', style: { flexWrap: 'wrap' } },
                   opsModes.map((mode) =>
                     h(
