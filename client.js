@@ -429,19 +429,53 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 只有「一个 HTTP 响应都没拿到」才算网络层失败，值得重发一次。
+     * 服务端回包了（比如 400 载荷校验不通过）再重发就是白传几百兆，所以 unwrap 抛的
+     * 普通 Error 一律不重试；AbortError 是用户主动取消，也不重试。
+     */
+    function isRetriableNetworkError(error) {
+      if (!error) return false
+      if (error.name === 'AbortError') return false
+      // 连接被对端掐断时 fetch 抛的是 TypeError('Failed to fetch')，没有 status 可言
+      if (error instanceof TypeError) return true
+      const message = String(error.message || error).toLowerCase()
+      return message.includes('failed to fetch')
+        || message.includes('network error')
+        || message.includes('networkerror')
+        || message.includes('socket hang up')
+        || message.includes('econnreset')
+    }
+
+    /**
      * 直接把文件本身当请求体 POST 上去（不先读成字符串、也不 JSON.stringify 一遍）。
      * 导入几百兆的导出文档时，这一步能把浏览器内存压力砍一半。
+     *
+     * 网络层断一次就重发一次：实测过 ECONNRESET 的成因是连上了服务端已经准备关掉的
+     * 空闲连接（事件循环卡顿后 socket 复用），重发会拿到新连接。文件是 File 对象，
+     * 重发不用重新读盘，代价只是再传一遍；比起让用户手动重来一次几百兆，这个更划算。
      */
     async function apiPostFile(path, file) {
       const glue = path.includes('?') ? '&' : '?'
       const url = activeSession === '' ? `${API_BASE}${path}` : `${API_BASE}${path}${glue}session=${encodeURIComponent(activeSession)}`
-      const response = await fetch(url, {
+      const send = () => fetch(url, {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json' },
         credentials: 'same-origin',
         body: file,
       })
-      return unwrap(response)
+      let lastError = null
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          return await unwrap(await send())
+        } catch (error) {
+          lastError = error
+          // 只重试一次，而且只重试网络层失败
+          if (attempt > 0 || !isRetriableNetworkError(error)) break
+          // 隔半秒再发，避开服务端刚判死的那条连接
+          await new Promise((resolve) => { setTimeout(resolve, 500) })
+        }
+      }
+      throw lastError
     }
 
     function clockLabel() {
